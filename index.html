@@ -892,12 +892,20 @@ function checkMissedDay() {
     d.setDate(d.getDate() - 1);
   }
 
+  var FRANCK_TEL = '33782071323';
+  var WHATSAPP_MSG = encodeURIComponent("Bonjour Franck, je n'arrive pas à valider mon suivi depuis 2 jours. Je pense que ça m'aiderait qu'on en parle 🙏");
+
   if (missedCount === 1) {
     var dateLabel = yesterday.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
     banner.innerHTML = "Tu n'as pas validé ta journée du <b>" + dateLabel + "</b>. Pas grave — on repart d'aujourd'hui. 🌱";
     banner.style.display = 'block';
-  } else if (missedCount > 1) {
-    banner.innerHTML = "Ça fait <b>" + missedCount + " jours</b> sans validation. Pas grave — on repart d'aujourd'hui, un pas à la fois. 🌱";
+  } else if (missedCount >= 2) {
+    banner.innerHTML =
+      "Ça fait <b>" + missedCount + " jours</b> sans validation. Ça arrive — et c'est peut-être le bon moment d'en parler avec Franck plutôt que de forcer seul·e. 🌱" +
+      '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">' +
+      '<a href="https://wa.me/' + FRANCK_TEL + '?text=' + WHATSAPP_MSG + '" target="_blank" rel="noopener" style="flex:1;min-width:140px;text-align:center;padding:10px 14px;background:#C9A84C;color:#091132;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none">💬 WhatsApp Franck</a>' +
+      '<a href="tel:+' + FRANCK_TEL + '" style="flex:1;min-width:140px;text-align:center;padding:10px 14px;background:transparent;border:1.5px solid #C9A84C;color:#E0C87E;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none">📞 Appeler</a>' +
+      '</div>';
     banner.style.display = 'block';
   } else {
     banner.style.display = 'none';
