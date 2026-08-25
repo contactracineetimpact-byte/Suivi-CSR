@@ -400,6 +400,65 @@ canvas{width:100%;height:100%}
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
+     NOUVEAU (25/08/2026) — Écran 3bis : Choix du moteur + confirmation
+     (guidé par Franck en séance). Le verrouillage qui empêche d'y revenir
+     ensuite est décidé côté serveur (statut de l'expérience dans Airtable),
+     jamais par le navigateur du client — voir get-experience.js.
+     ═══════════════════════════════════════════════════════════ -->
+<div id="s-moteur-choice" class="screen">
+  <div class="seance-wrap">
+    <div class="top-bar" style="margin-bottom:20px">
+      <div>
+        <div class="page-title">Qu'est-ce qu'on cherche à transformer ?</div>
+        <div class="page-sub">Avec Franck, déterminez ensemble ce qui correspond à ton besoin aujourd'hui.</div>
+      </div>
+      <button class="btn-ghost" onclick="goHub()" style="font-size:13px">⌂ Accueil</button>
+    </div>
+
+    <div id="moteur-cards">
+      <div class="score-block" style="cursor:pointer" onclick="selectMoteurPending('ANCRAGE')">
+        <div class="score-block-name">
+          <div class="score-dot" style="background:#8fbf8f"></div>
+          ANCRAGE
+        </div>
+        <div class="score-question" style="font-style:normal">
+          Installer quelque chose qui manque. Une action, une habitude ou un comportement que tu veux intégrer à ton système.
+        </div>
+        <button class="btn-ghost" style="width:100%;padding:12px;margin-top:8px;border-color:#8fbf8f;color:#8fbf8f">Choisir ANCRAGE</button>
+      </div>
+
+      <div class="score-block" style="cursor:pointer" onclick="selectMoteurPending('RUPTURE')">
+        <div class="score-block-name">
+          <div class="score-dot" style="background:#e0847e"></div>
+          RUPTURE
+        </div>
+        <div class="score-question" style="font-style:normal">
+          Arrêter quelque chose qui te freine. Une habitude, une réaction ou un comportement automatique que tu veux interrompre.
+        </div>
+        <button class="btn-ghost" style="width:100%;padding:12px;margin-top:8px;border-color:#e0847e;color:#e0847e">Choisir RUPTURE</button>
+      </div>
+    </div>
+
+    <!-- Étape de confirmation — évite qu'un choix mal formulé devienne
+         irréversible sans validation explicite -->
+    <div id="moteur-confirm" style="display:none">
+      <div class="score-block">
+        <div class="score-block-name" id="confirm-title"></div>
+        <div class="score-question" id="confirm-desc" style="font-style:normal"></div>
+        <div class="just-label" style="margin-top:10px">Objectif <span class="required">Obligatoire</span></div>
+        <textarea class="just-input" id="confirm-objectif" placeholder="Qu'est-ce que tu veux obtenir concrètement d'ici 60 jours ?"></textarea>
+        <div class="field-err" id="confirm-objectif-err">Ce champ est obligatoire.</div>
+        <div style="display:flex;gap:10px;margin-top:14px">
+          <button class="btn-ghost" onclick="cancelMoteurChoice()" style="flex:1;padding:12px">← Revenir</button>
+          <button class="btn-ghost" id="btn-confirm-moteur" onclick="confirmMoteurChoice()" style="flex:1;padding:12px;background:rgba(201,168,76,.12);border-color:var(--or)">Confirmer →</button>
+        </div>
+      </div>
+      <div id="moteur-choice-err" class="field-err" style="display:none;margin-top:10px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
      NOUVEAU (25/08/2026) — Écran 4 : Questionnaire ANCRAGE/RUPTURE
      ═══════════════════════════════════════════════════════════ -->
 <div id="s-questionnaire" class="screen">
@@ -1451,8 +1510,13 @@ var QUESTIONS_RUPTURE = [
 var currentMoteur = null;
 var currentExperienceId = null;
 
+var pendingMoteur = null;
+
+// NOUVEAU — le serveur (Airtable, via get-experience) est l'unique source de
+// vérité pour savoir ce que le client doit voir : aucun choix ni verrouillage
+// ne dépend jamais de localStorage ni d'un état gardé côté navigateur.
 function openQuestionnaire() {
-  showScreen('s-questionnaire');
+  showScreen('s-questionnaire'); // écran temporaire pendant le chargement
   document.getElementById('quest-loading').style.display = 'block';
   document.getElementById('quest-error').style.display = 'none';
   document.getElementById('quest-form').style.display = 'none';
@@ -1460,13 +1524,28 @@ function openQuestionnaire() {
   fetch('/api/get-experience?code=' + encodeURIComponent(code))
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      document.getElementById('quest-loading').style.display = 'none';
-      if (!data.hasExperience || !data.moteur) {
-        document.getElementById('quest-error').style.display = 'block';
+      if (!data.hasExperience) {
+        // Aucune expérience : le client choisit son moteur, guidé par Franck.
+        document.getElementById('moteur-cards').style.display = 'block';
+        document.getElementById('moteur-confirm').style.display = 'none';
+        showScreen('s-moteur-choice');
         return;
       }
+
       currentMoteur = data.moteur;
       currentExperienceId = data.experienceId;
+
+      if (data.locked) {
+        // Plan déjà généré et verrouillé côté serveur : lecture seule,
+        // à partir des réponses réellement stockées dans Airtable — jamais
+        // depuis un cache local qui pourrait être absent ou périmé.
+        renderPlan(data.planAnswers || []);
+        showScreen('s-plan');
+        return;
+      }
+
+      // Expérience configurée mais pas encore verrouillée : questionnaire.
+      document.getElementById('quest-loading').style.display = 'none';
       renderQuestionnaire(data.moteur);
       document.getElementById('quest-form').style.display = 'block';
     })
@@ -1474,6 +1553,75 @@ function openQuestionnaire() {
       document.getElementById('quest-loading').style.display = 'none';
       document.getElementById('quest-error').style.display = 'block';
       console.warn('Erreur chargement expérience :', e);
+    });
+}
+
+function selectMoteurPending(moteur) {
+  pendingMoteur = moteur;
+  var isAncrage = moteur === 'ANCRAGE';
+  document.getElementById('confirm-title').innerHTML =
+    '<div class="score-dot" style="background:' + (isAncrage ? '#8fbf8f' : '#e0847e') + '"></div>Tu as choisi ' + moteur;
+  document.getElementById('confirm-desc').textContent = isAncrage
+    ? 'Nous allons donc construire une action nouvelle à intégrer à ton système.'
+    : 'Nous allons donc construire un système pour interrompre cette habitude.';
+  document.getElementById('confirm-objectif').value = '';
+  document.getElementById('confirm-objectif-err').style.display = 'none';
+  document.getElementById('moteur-cards').style.display = 'none';
+  document.getElementById('moteur-confirm').style.display = 'block';
+}
+
+function cancelMoteurChoice() {
+  pendingMoteur = null;
+  document.getElementById('moteur-cards').style.display = 'block';
+  document.getElementById('moteur-confirm').style.display = 'none';
+}
+
+function confirmMoteurChoice() {
+  var objectifEl = document.getElementById('confirm-objectif');
+  var objectif = objectifEl.value.trim();
+  var objErr = document.getElementById('confirm-objectif-err');
+  if (!objectif || objectif.length < 3) {
+    objectifEl.classList.add('error');
+    objErr.style.display = 'block';
+    return;
+  }
+  objectifEl.classList.remove('error');
+  objErr.style.display = 'none';
+
+  var err = document.getElementById('moteur-choice-err');
+  err.style.display = 'none';
+  var btn = document.getElementById('btn-confirm-moteur');
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement...';
+
+  fetch('/api/create-experience', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: code, moteur: pendingMoteur, objectif: objectif }),
+  })
+    .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+    .then(function(result) {
+      btn.disabled = false;
+      btn.textContent = 'Confirmer →';
+      if (!result.ok) {
+        err.textContent = result.data.error || "Une erreur est survenue. Préviens Franck.";
+        err.style.display = 'block';
+        return;
+      }
+      currentMoteur = pendingMoteur;
+      currentExperienceId = result.data.experienceId;
+      showScreen('s-questionnaire');
+      document.getElementById('quest-loading').style.display = 'none';
+      document.getElementById('quest-error').style.display = 'none';
+      renderQuestionnaire(pendingMoteur);
+      document.getElementById('quest-form').style.display = 'block';
+    })
+    .catch(function(e) {
+      btn.disabled = false;
+      btn.textContent = 'Confirmer →';
+      err.textContent = "Erreur réseau. Réessaie, ou préviens Franck si ça persiste.";
+      err.style.display = 'block';
+      console.warn('Erreur create-experience :', e);
     });
 }
 
@@ -1560,8 +1708,11 @@ function submitQuestionnaire() {
       }).then(function() { return answers; });
     })
     .then(function(answers) {
+      // Le plan est maintenant verrouillé côté serveur (save-cycle passe le
+      // statut de l'expérience à "Test en cours"). On l'affiche directement
+      // ici pour un retour immédiat, mais la prochaine ouverture de cet
+      // écran relira toujours l'état réel depuis get-experience.
       renderPlan(answers);
-      save('plan_' + code, { answers: answers, moteur: currentMoteur, dateGenere: new Date().toISOString() });
       showScreen('s-plan');
       btn.disabled = false;
       btn.textContent = 'Générer mon plan';
