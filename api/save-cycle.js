@@ -125,6 +125,20 @@ export default async function handler(req, res) {
       throw new Error('Échec écriture Airtable');
     }
 
+    // Verrouillage côté serveur : la CRÉATION du premier cycle (pas sa mise à
+    // jour ultérieure) fait passer l'expérience de "Configuration" à "Test en
+    // cours" — c'est ce statut, lu par get-experience, qui décide si le
+    // client revoit le questionnaire ou son plan verrouillé. Jamais le
+    // navigateur du client qui décide de ça.
+    if (!existingCycleId) {
+      const TABLE_EXPERIENCES = 'CSR_Expériences';
+      await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}/${experienceRecordId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ fields: { Statut: 'Test en cours' } }),
+      }).catch((e) => console.error('Échec verrouillage statut expérience:', e));
+    }
+
     return res.status(200).json({ success: true, updated: !!existingCycleId });
   } catch (err) {
     console.error('Erreur save-cycle:', err);
