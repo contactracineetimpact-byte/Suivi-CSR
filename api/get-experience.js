@@ -49,6 +49,29 @@ export default async function handler(req, res) {
 
     const moteurField = expData.fields['Moteur'];
     const moteur = typeof moteurField === 'string' ? moteurField : moteurField && moteurField.name;
+    const statutField = expData.fields['Statut'];
+    const statut = typeof statutField === 'string' ? statutField : statutField && statutField.name;
+
+    // Verrouillage décidé côté serveur : tant que le statut est "En triage" ou
+    // "Configuration", le plan n'est pas encore généré, le client répond au
+    // questionnaire. Dès que le statut avance (typiquement "Test en cours"
+    // une fois le premier cycle créé), l'expérience est verrouillée — on
+    // renvoie alors les réponses déjà enregistrées pour affichage en lecture
+    // seule, sans jamais dépendre du navigateur du client pour cette décision.
+    const isLocked = !!statut && statut !== 'En triage' && statut !== 'Configuration';
+
+    let planAnswers = null;
+    if (isLocked) {
+      const TABLE_CONFIG = 'CSR_Configuration';
+      const configUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CONFIG}?pageSize=100`;
+      const configRes = await fetch(configUrl, { headers });
+      const configData = await configRes.json();
+      if (configData.records) {
+        planAnswers = configData.records
+          .filter((r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(experienceRecordId))
+          .map((r) => ({ etape: r.fields['Étape'], reponse: r.fields['Réponse'] }));
+      }
+    }
 
     return res.status(200).json({
       hasExperience: true,
@@ -56,6 +79,9 @@ export default async function handler(req, res) {
       moteur: moteur || null,
       objectif: expData.fields['Objectif'] || null,
       nomExperience: expData.fields['Nom expérience'] || null,
+      statut: statut || null,
+      locked: isLocked,
+      planAnswers: planAnswers,
     });
   } catch (err) {
     console.error('Erreur get-experience:', err);
