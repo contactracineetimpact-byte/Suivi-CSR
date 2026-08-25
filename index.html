@@ -198,6 +198,11 @@ canvas{width:100%;height:100%}
       <div style="font-size:13px;color:rgba(245,240,232,.6)">Coche ce que tu as fait aujourd'hui</div>
     </div>
 
+    <div class="routine-card hub-card" onclick="openQuestionnaire()" style="cursor:pointer;transition:all .2s">
+      <div style="font-size:20px;font-weight:700;color:#C9A84C;font-family:'Cormorant Garamond',serif;margin-bottom:4px">Mon système</div>
+      <div style="font-size:13px;color:rgba(245,240,232,.6)">Configurer ou revoir ton plan ANCRAGE ou RUPTURE</div>
+    </div>
+
     <div class="routine-card hub-card" onclick="showNav('seance')" style="cursor:pointer;transition:all .2s">
       <div style="font-size:20px;font-weight:700;color:#C9A84C;font-family:'Cormorant Garamond',serif;margin-bottom:4px">Séance</div>
       <div style="font-size:13px;color:rgba(245,240,232,.6)">Avec Franck — évaluer tes scores, fixer tes actions</div>
@@ -392,6 +397,62 @@ canvas{width:100%;height:100%}
       <span class="nav-icon">●</span><span class="nav-label">Bilan</span>
     </button>
   </nav>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     NOUVEAU (25/08/2026) — Écran 4 : Questionnaire ANCRAGE/RUPTURE
+     ═══════════════════════════════════════════════════════════ -->
+<div id="s-questionnaire" class="screen">
+  <div class="seance-wrap">
+    <div class="top-bar" style="margin-bottom:20px">
+      <div>
+        <div class="page-title" id="quest-title">Ton système</div>
+        <div class="page-sub" id="quest-sub">Réponds à ces 7 questions pour construire ton plan personnalisé.</div>
+      </div>
+      <button class="btn-ghost" onclick="goHub()" style="font-size:13px">⌂ Accueil</button>
+    </div>
+
+    <div id="quest-loading" style="color:rgba(245,240,232,.6);font-size:14px;padding:20px 0">
+      Chargement de ton système...
+    </div>
+
+    <div id="quest-error" style="display:none;color:#e0847e;font-size:14px;padding:20px 0">
+      Aucun système actif n'a encore été configuré pour toi. Parles-en à Franck avant de continuer.
+    </div>
+
+    <div id="quest-form" style="display:none">
+      <div id="quest-blocks"></div>
+
+      <button class="btn-ghost" id="btn-submit-quest" onclick="submitQuestionnaire()"
+        style="width:100%;padding:14px;margin-top:10px;font-size:13px;background:rgba(201,168,76,.12);border-color:var(--or)">
+        Générer mon plan
+      </button>
+      <div class="field-err" id="quest-submit-err" style="display:none;margin-top:10px">
+        Merci de répondre à toutes les questions avant de continuer.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     Écran 5 : Plan généré (checklist basée sur les réponses)
+     ═══════════════════════════════════════════════════════════ -->
+<div id="s-plan" class="screen">
+  <div class="seance-wrap">
+    <div class="top-bar" style="margin-bottom:20px">
+      <div>
+        <div class="page-title">Ton système à tester</div>
+        <div class="page-sub">Teste ce plan pendant 3 à 5 jours. On en reparle à ta prochaine séance.</div>
+      </div>
+      <button class="btn-ghost" onclick="goHub()" style="font-size:13px">⌂ Accueil</button>
+    </div>
+
+    <div class="score-block" id="plan-checklist"></div>
+
+    <div style="color:rgba(245,240,232,.5);font-size:12px;margin-top:10px;text-align:center">
+      Ce plan a bien été enregistré. Retrouve-le à tout moment depuis l'accueil.
+    </div>
+  </div>
 </div>
 
 <!-- TABLEAU -->
@@ -1364,6 +1425,164 @@ function syncFromServer(code) {
     .catch(function(e) {
       console.warn('Impossible de récupérer les données serveur, utilisation du cache local :', e);
     });
+}
+
+// ═══════════════════════════════════════════════════════════
+// NOUVEAU (25/08/2026) — Questionnaire ANCRAGE/RUPTURE
+// ═══════════════════════════════════════════════════════════
+var QUESTIONS_ANCRAGE = [
+  { id: 'A1', lettre: 'A', titre: 'Ambition', question: "Qu'est-ce que tu veux obtenir concrètement d'ici 60 jours ?" },
+  { id: 'N1', lettre: 'N', titre: 'Neutraliser les résistances', question: "Qu'est-ce qui pourrait rendre l'action difficile, et que peux-tu préparer à l'avance ?" },
+  { id: 'C1', lettre: 'C', titre: 'Connecter (avec charge émotionnelle)', question: "Quel signal, chargé émotionnellement, peut déclencher ton départ ?" },
+  { id: 'R1', lettre: 'R', titre: 'Représenter', question: "Imagine-toi au moment de commencer : que fais-tu exactement, et comment te sens-tu juste après ?" },
+  { id: 'A2', lettre: 'A', titre: 'Agir', question: "Quelle est la plus petite action qui constitue un vrai progrès ?" },
+  { id: 'G1', lettre: 'G', titre: 'Garder la preuve', question: "Comment vas-tu constater, chaque jour, que tu l'as fait ?" },
+];
+
+var QUESTIONS_RUPTURE = [
+  { id: 'R1', lettre: 'R', titre: 'Résultat recherché', question: "Qu'est-ce que tu veux pouvoir faire ou vivre à la place de cette habitude ?" },
+  { id: 'U1', lettre: 'U', titre: 'Un frein', question: "Qu'est-ce qui rend cette habitude trop facile aujourd'hui, et quel obstacle peux-tu ajouter ?" },
+  { id: 'P1', lettre: 'P', titre: 'Percevoir le signal', question: "Quel signal annonce que l'habitude est sur le point de commencer ?" },
+  { id: 'T1', lettre: 'T', titre: 'Transformer la réponse (avec charge équivalente)', question: "Si ce signal apparaît, quelle réponse veux-tu avoir à la place ?" },
+  { id: 'U2', lettre: 'U', titre: "Utiliser l'alternative", question: "Quelle est la plus petite action qui te permet d'interrompre le cycle ?" },
+  { id: 'R2', lettre: 'R', titre: 'Relever la preuve', question: "Comment vas-tu noter, chaque jour, si tu as intercepté ou non ?" },
+];
+
+var currentMoteur = null;
+var currentExperienceId = null;
+
+function openQuestionnaire() {
+  showScreen('s-questionnaire');
+  document.getElementById('quest-loading').style.display = 'block';
+  document.getElementById('quest-error').style.display = 'none';
+  document.getElementById('quest-form').style.display = 'none';
+
+  fetch('/api/get-experience?code=' + encodeURIComponent(code))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      document.getElementById('quest-loading').style.display = 'none';
+      if (!data.hasExperience || !data.moteur) {
+        document.getElementById('quest-error').style.display = 'block';
+        return;
+      }
+      currentMoteur = data.moteur;
+      currentExperienceId = data.experienceId;
+      renderQuestionnaire(data.moteur);
+      document.getElementById('quest-form').style.display = 'block';
+    })
+    .catch(function(e) {
+      document.getElementById('quest-loading').style.display = 'none';
+      document.getElementById('quest-error').style.display = 'block';
+      console.warn('Erreur chargement expérience :', e);
+    });
+}
+
+function renderQuestionnaire(moteur) {
+  var isAncrage = moteur === 'ANCRAGE';
+  document.getElementById('quest-title').textContent = isAncrage ? 'Méthode ANCRAGE' : 'Méthode RUPTURE';
+  document.getElementById('quest-sub').textContent = isAncrage
+    ? 'Installer une action que tu ne fais pas encore.'
+    : 'Interrompre une habitude déjà là.';
+
+  var questions = isAncrage ? QUESTIONS_ANCRAGE : QUESTIONS_RUPTURE;
+  var color = isAncrage ? '#8fbf8f' : '#e0847e';
+  var html = '';
+
+  questions.forEach(function(q) {
+    html += '<div class="score-block">'
+      + '<div class="score-block-name"><div class="score-dot" style="background:' + color + '"></div>'
+      + q.lettre + ' — ' + q.titre + '</div>'
+      + '<div class="score-question">' + q.question + '</div>'
+      + '<textarea class="just-input" id="qa-' + q.id + '" placeholder="Ta réponse..."></textarea>'
+      + '<div class="field-err" id="qerr-' + q.id + '">Ce champ est obligatoire.</div>'
+      + '</div>';
+  });
+
+  document.getElementById('quest-blocks').innerHTML = html;
+}
+
+function submitQuestionnaire() {
+  var questions = currentMoteur === 'ANCRAGE' ? QUESTIONS_ANCRAGE : QUESTIONS_RUPTURE;
+  var ok = true;
+  var answers = [];
+
+  questions.forEach(function(q) {
+    var el = document.getElementById('qa-' + q.id);
+    var err = document.getElementById('qerr-' + q.id);
+    var val = el.value.trim();
+    if (!val || val.length < 3) {
+      el.classList.add('error'); err.style.display = 'block'; ok = false;
+    } else {
+      el.classList.remove('error'); err.style.display = 'none';
+      answers.push({ etape: q.lettre + ' — ' + q.titre, question: q.question, reponse: val, lettre: q.lettre });
+    }
+  });
+
+  if (!ok) {
+    document.querySelector('#quest-blocks .just-input.error').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
+  var btn = document.getElementById('btn-submit-quest');
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement...';
+
+  var savePromises = answers.map(function(a) {
+    return fetch('/api/save-configuration', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: code, etape: a.etape, question: a.question, reponse: a.reponse }),
+    });
+  });
+
+  Promise.all(savePromises)
+    .then(function() {
+      var actionsPrevuesTexte = answers.map(function(a) {
+        return a.etape + ' : ' + a.reponse;
+      }).join('\n\n');
+
+      var dateDebut = new Date().toISOString().slice(0, 10);
+      var dateFinObj = new Date();
+      dateFinObj.setDate(dateFinObj.getDate() + 5);
+      var dateFin = dateFinObj.toISOString().slice(0, 10);
+
+      return fetch('/api/save-cycle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: code,
+          nomCycle: 'Cycle 1',
+          numeroCycle: 1,
+          dateDebut: dateDebut,
+          dateFin: dateFin,
+          actionsPrevues: actionsPrevuesTexte,
+        }),
+      }).then(function() { return answers; });
+    })
+    .then(function(answers) {
+      renderPlan(answers);
+      save('plan_' + code, { answers: answers, moteur: currentMoteur, dateGenere: new Date().toISOString() });
+      showScreen('s-plan');
+      btn.disabled = false;
+      btn.textContent = 'Générer mon plan';
+    })
+    .catch(function(e) {
+      console.error('Erreur enregistrement questionnaire :', e);
+      btn.disabled = false;
+      btn.textContent = 'Générer mon plan';
+      alert("Une erreur est survenue pendant l'enregistrement. Réessaie, ou préviens Franck si ça persiste.");
+    });
+}
+
+function renderPlan(answers) {
+  var html = '<div class="score-block-name" style="margin-bottom:14px">Ton plan, construit à partir de tes réponses</div>';
+  answers.forEach(function(a) {
+    html += '<div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(245,240,232,.1)">'
+      + '<div style="font-size:12px;color:var(--or);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">' + a.etape + '</div>'
+      + '<div style="font-size:14px;color:var(--creme);line-height:1.5">☐ ' + a.reponse + '</div>'
+      + '</div>';
+  });
+  document.getElementById('plan-checklist').innerHTML = html;
 }
 
 // ── UTILS ────────────────────────────────────────────────
