@@ -66,19 +66,23 @@ export default async function handler(req, res) {
 
     const experienceRecordId = experienceLinks[0];
 
-    // 2. Chercher si un cycle du même nom existe déjà pour cette expérience
-    //    (permet d'appeler cette route deux fois : création puis mise à jour
-    //    des mesures à la fin du cycle, sans créer de doublon).
+    // 2. Chercher si un cycle du même nom existe déjà. On filtre uniquement
+    //    par nom ici, puis on vérifie le lien vers l'expérience côté JS —
+    //    ARRAYJOIN() sur un champ de liaison renvoie le nom affiché du
+    //    enregistrement lié (son champ primaire), pas son ID, donc comparer
+    //    ce résultat à experienceRecordId ne fonctionne jamais.
     let existingCycleId = null;
     if (nomCycle) {
-      const cycleFilter = encodeURIComponent(
-        `AND({Nom du cycle}='${nomCycle}', FIND('${experienceRecordId}', ARRAYJOIN({Expérience})))`
-      );
-      const searchCycleUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}?filterByFormula=${cycleFilter}&maxRecords=1`;
+      const cycleFilter = encodeURIComponent(`{Nom du cycle}='${nomCycle}'`);
+      const searchCycleUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}?filterByFormula=${cycleFilter}&returnFieldsByFieldId=false`;
       const searchCycleRes = await fetch(searchCycleUrl, { headers });
       const searchCycleData = await searchCycleRes.json();
       if (searchCycleData.records && searchCycleData.records.length > 0) {
-        existingCycleId = searchCycleData.records[0].id;
+        const match = searchCycleData.records.find((r) => {
+          const links = r.fields['Expérience'];
+          return Array.isArray(links) && links.includes(experienceRecordId);
+        });
+        if (match) existingCycleId = match.id;
       }
     }
 
