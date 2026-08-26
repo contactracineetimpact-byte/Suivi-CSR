@@ -61,15 +61,40 @@ export default async function handler(req, res) {
     const isLocked = !!statut && statut !== 'En triage' && statut !== 'Configuration';
 
     let planAnswers = null;
+    let checkinContext = null;
     if (isLocked) {
       const TABLE_CONFIG = 'CSR_Configuration';
       const configUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CONFIG}?pageSize=100`;
       const configRes = await fetch(configUrl, { headers });
       const configData = await configRes.json();
       if (configData.records) {
-        planAnswers = configData.records
-          .filter((r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(experienceRecordId))
-          .map((r) => ({ etape: r.fields['Étape'], reponse: r.fields['Réponse'] }));
+        const ownAnswers = configData.records.filter(
+          (r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(experienceRecordId)
+        );
+        planAnswers = ownAnswers.map((r) => ({ etape: r.fields['Étape'], reponse: r.fields['Réponse'] }));
+
+        // NOUVEAU (26/08/2026) — Résout le contexte personnalisé du check-in
+        // quotidien à partir des réponses réelles du client, pour que
+        // l'interface n'ait jamais à deviner le mapping elle-même.
+        const findByEtape = (predicate) => {
+          const match = ownAnswers.find((r) => predicate(r.fields['Étape'] || ''));
+          return match ? match.fields['Réponse'] : null;
+        };
+
+        if (moteur === 'ANCRAGE') {
+          checkinContext = {
+            signal: findByEtape((e) => e.startsWith('C —') || e.startsWith('C -')),
+            action: findByEtape((e) => e.includes('Agir')),
+            preuve: findByEtape((e) => e.includes('Garder la preuve')),
+          };
+        } else if (moteur === 'RUPTURE') {
+          checkinContext = {
+            signal: findByEtape((e) => e.includes('Percevoir le signal') && e.includes('émotion')),
+            ancienComportement: findByEtape((e) => e.includes('Percevoir le signal') && e.includes('automatisme')),
+            alternative: findByEtape((e) => e.includes('Transformer la réponse')),
+            preuve: findByEtape((e) => e.includes('Relever la preuve')),
+          };
+        }
       }
     }
 
@@ -82,6 +107,7 @@ export default async function handler(req, res) {
       statut: statut || null,
       locked: isLocked,
       planAnswers: planAnswers,
+      checkinContext: checkinContext,
     });
   } catch (err) {
     console.error('Erreur get-experience:', err);
