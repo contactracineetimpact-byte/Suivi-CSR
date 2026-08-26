@@ -1,17 +1,21 @@
 // api/save-cycle.js
 //
 // NOUVEAU (25/08/2026) — Crée ou met à jour un cycle de test (3-5 jours) dans
-// CSR_Cycles, relié à l'expérience active du client. Même pattern que
-// save-configuration.js : résout d'abord le client puis son expérience active.
+// CSR_Cycles, relié à l'expérience active du client.
 //
-// Corps attendu (POST) :
-//   { code, nomCycle, numeroCycle, dateDebut, dateFin, actionsPrevues,
-//     facilite, identite, alignement, resultatObserve, decisionSuivante }
+// MIS À JOUR (26/08/2026) — Ajout des champs du bilan de fin de cycle
+// (Réalité observée, Résultat, Facteur facilité/difficulté, Comportement
+// identitaire observé, Justification alignement, Apprentissage), et support
+// d'un ciblage direct par cycleId (utilisé par l'écran de bilan, qui connaît
+// déjà l'ID exact du cycle via get-cycle-summary — plus fiable que la
+// recherche par nom pour une mise à jour de fin de cycle).
 //
-// Tous les champs de mesure (facilite/identite/alignement) sont optionnels à
-// la création du cycle — ils sont typiquement remplis à la FIN du cycle de
-// test, pas au moment où le cycle démarre. Ce endpoint sert donc aux deux
-// usages : créer le cycle au départ, puis le mettre à jour avec les mesures.
+// Corps attendu (POST), tous les champs de mesure sont optionnels :
+//   { code, cycleId?, nomCycle, numeroCycle, dateDebut, dateFin,
+//     actionsPrevues, facilite, identite, alignement, resultatObserve,
+//     decisionSuivante, realiteObservee, resultat,
+//     facteurFaciliteDifficulte, comportementIdentitaireObserve,
+//     justificationAlignement, apprentissage }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -21,6 +25,7 @@ export default async function handler(req, res) {
   try {
     const {
       code,
+      cycleId,
       nomCycle,
       numeroCycle,
       dateDebut,
@@ -31,6 +36,12 @@ export default async function handler(req, res) {
       alignement,
       resultatObserve,
       decisionSuivante,
+      realiteObservee,
+      resultat,
+      facteurFaciliteDifficulte,
+      comportementIdentitaireObserve,
+      justificationAlignement,
+      apprentissage,
     } = req.body;
 
     if (!code || typeof code !== 'string') {
@@ -66,13 +77,29 @@ export default async function handler(req, res) {
 
     const experienceRecordId = experienceLinks[0];
 
-    // 2. Chercher si un cycle du même nom existe déjà. On filtre uniquement
-    //    par nom ici, puis on vérifie le lien vers l'expérience côté JS —
-    //    ARRAYJOIN() sur un champ de liaison renvoie le nom affiché du
-    //    enregistrement lié (son champ primaire), pas son ID, donc comparer
-    //    ce résultat à experienceRecordId ne fonctionne jamais.
+    // 2. Cible du cycle : si cycleId est fourni explicitement (cas du bilan
+    //    de fin de cycle, qui connaît déjà l'ID exact), on l'utilise
+    //    directement — plus fiable qu'une recherche par nom. On vérifie
+    //    quand même que ce cycle appartient bien à l'expérience active du
+    //    client, pour ne jamais laisser une requête modifier le cycle d'un
+    //    autre client par erreur ou par ID deviné.
     let existingCycleId = null;
-    if (nomCycle) {
+
+    if (cycleId) {
+      const checkUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}/${cycleId}`;
+      const checkRes = await fetch(checkUrl, { headers });
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        const links = checkData.fields['Expérience'];
+        if (Array.isArray(links) && links.includes(experienceRecordId)) {
+          existingCycleId = cycleId;
+        } else {
+          return res.status(403).json({ error: "Ce cycle n'appartient pas à l'expérience active de ce client." });
+        }
+      }
+    } else if (nomCycle) {
+      // Recherche par nom uniquement quand aucun cycleId n'est fourni
+      // (cas de la création initiale du cycle depuis le questionnaire).
       const cycleFilter = encodeURIComponent(`{Nom du cycle}='${nomCycle}'`);
       const searchCycleUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}?filterByFormula=${cycleFilter}&returnFieldsByFieldId=false`;
       const searchCycleRes = await fetch(searchCycleUrl, { headers });
@@ -100,6 +127,12 @@ export default async function handler(req, res) {
     if (alignement !== undefined) fields['Alignement perçu'] = alignement;
     if (resultatObserve !== undefined) fields['Résultat observé'] = resultatObserve;
     if (decisionSuivante !== undefined) fields['Décision suivante'] = decisionSuivante;
+    if (realiteObservee !== undefined) fields['Réalité observée'] = realiteObservee;
+    if (resultat !== undefined) fields['Résultat'] = resultat;
+    if (facteurFaciliteDifficulte !== undefined) fields['Facteur facilité/difficulté'] = facteurFaciliteDifficulte;
+    if (comportementIdentitaireObserve !== undefined) fields['Comportement identitaire observé'] = comportementIdentitaireObserve;
+    if (justificationAlignement !== undefined) fields['Justification alignement'] = justificationAlignement;
+    if (apprentissage !== undefined) fields['Apprentissage'] = apprentissage;
 
     if (!existingCycleId) {
       fields['Expérience'] = [experienceRecordId];
@@ -125,11 +158,12 @@ export default async function handler(req, res) {
       throw new Error('Échec écriture Airtable');
     }
 
+    const opData = await opRes.json();
+
     // Verrouillage côté serveur : la CRÉATION du premier cycle (pas sa mise à
     // jour ultérieure) fait passer l'expérience de "Configuration" à "Test en
     // cours" — c'est ce statut, lu par get-experience, qui décide si le
-    // client revoit le questionnaire ou son plan verrouillé. Jamais le
-    // navigateur du client qui décide de ça.
+    // client revoit le questionnaire ou son plan verrouillé.
     if (!existingCycleId) {
       const TABLE_EXPERIENCES = 'CSR_Expériences';
       await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}/${experienceRecordId}`, {
@@ -139,7 +173,7 @@ export default async function handler(req, res) {
       }).catch((e) => console.error('Échec verrouillage statut expérience:', e));
     }
 
-    return res.status(200).json({ success: true, updated: !!existingCycleId });
+    return res.status(200).json({ success: true, updated: !!existingCycleId, cycleId: existingCycleId || opData.id });
   } catch (err) {
     console.error('Erreur save-cycle:', err);
     return res.status(500).json({ error: 'Erreur serveur' });
