@@ -1642,7 +1642,7 @@ function openQuestionnaire() {
   document.getElementById('quest-error').style.display = 'none';
   document.getElementById('quest-form').style.display = 'none';
 
-  fetch('/api/get-experience?code=' + encodeURIComponent(code))
+  fetch('/api/get-experience?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (!data.hasExperience) {
@@ -1933,7 +1933,7 @@ function openBilan() {
   document.getElementById('bilan-readonly').style.display = 'none';
   document.getElementById('bilan-form').style.display = 'none';
 
-  fetch('/api/get-cycle-summary?code=' + encodeURIComponent(code))
+  fetch('/api/get-cycle-summary?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       document.getElementById('bilan-loading').style.display = 'none';
@@ -1947,7 +1947,7 @@ function openBilan() {
       bilanCycleId = data.cycleId;
 
       document.getElementById('bilan-summary').style.display = 'block';
-      document.getElementById('bilan-summary-name').textContent = data.nomExperience + ' — ' + data.moteur;
+      document.getElementById('bilan-summary-name').textContent = data.nomExperience || (data.moteur || '');
       var duree = '';
       if (data.dateDebut && data.dateFin) duree = 'Du ' + data.dateDebut + ' au ' + data.dateFin + '.';
       document.getElementById('bilan-summary-details').textContent = duree || (data.nomCycle || '');
