@@ -73,8 +73,17 @@ export default async function handler(req, res) {
 
     // Un cycle est considéré "déjà évalué" si le champ Décision suivante a
     // été rempli — c'est ce qui signe la fin du bilan.
-    const decisionField = latest.fields['Décision suivante'];
-    const alreadyEvaluated = !!decisionField;
+    // Extraction défensive : un champ singleSelect renvoie normalement un
+    // objet {id, color, name}, mais on tolère aussi une chaîne brute pour
+    // ne jamais planter sur un format inattendu.
+    function extractSelectName(field) {
+      if (!field) return null;
+      if (typeof field === 'string') return field;
+      if (typeof field === 'object' && field.name) return field.name;
+      return null;
+    }
+    const decisionName = extractSelectName(latest.fields['Décision suivante']);
+    const alreadyEvaluated = !!decisionName;
 
     return res.status(200).json({
       hasCycle: true,
@@ -94,14 +103,13 @@ export default async function handler(req, res) {
             resultat: latest.fields['Résultat'] || null,
             resultatObserve: latest.fields['Résultat observé'] || null,
             facilite: latest.fields['Facilité'] || null,
-            facteurFaciliteDifficulte:
-              (latest.fields['Facteur facilité/difficulté'] && latest.fields['Facteur facilité/difficulté'].name) || null,
+            facteurFaciliteDifficulte: extractSelectName(latest.fields['Facteur facilité/difficulté']),
             identite: latest.fields['Identité'] || null,
             comportementIdentitaireObserve: latest.fields['Comportement identitaire observé'] || null,
             alignement: latest.fields['Alignement perçu'] || null,
             justificationAlignement: latest.fields['Justification alignement'] || null,
             apprentissage: latest.fields['Apprentissage'] || null,
-            decisionSuivante: (decisionField && decisionField.name) || null,
+            decisionSuivante: decisionName,
           }
         : null,
     });
