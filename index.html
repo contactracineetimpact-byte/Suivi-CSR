@@ -1955,6 +1955,14 @@ function openBilan() {
       if (data.alreadyEvaluated) {
         renderBilanReadonly(data);
         document.getElementById('bilan-readonly').style.display = 'block';
+        // DEBUG TEMPORAIRE (26/08/2026) — à retirer une fois le bug de
+        // décision manquante résolu. Affiche la réponse brute de l'API pour
+        // voir exactement ce qui est reçu, sans avoir à deviner.
+        document.getElementById('bilan-readonly').innerHTML +=
+          '<div class="score-block" style="font-family:monospace;font-size:11px;color:rgba(245,240,232,.6);word-break:break-all">'
+          + '<div style="color:#e0847e;margin-bottom:8px">DEBUG — réponse brute :</div>'
+          + JSON.stringify(data, null, 2).replace(/</g, '&lt;')
+          + '</div>';
         return;
       }
 
