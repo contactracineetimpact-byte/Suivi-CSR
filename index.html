@@ -511,6 +511,127 @@ canvas{width:100%;height:100%}
     <div style="color:rgba(245,240,232,.5);font-size:12px;margin-top:10px;text-align:center">
       Ce plan a bien été enregistré. Retrouve-le à tout moment depuis l'accueil.
     </div>
+
+    <button class="btn-ghost" onclick="openBilan()" style="width:100%;padding:14px;margin-top:16px;font-size:13px;background:rgba(201,168,76,.12);border-color:var(--or)">
+      Faire le bilan de ce cycle →
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     NOUVEAU (26/08/2026) — Écran de bilan de fin de cycle.
+     Une expérience ne constitue jamais simplement un échec : elle produit
+     soit un résultat, soit une information. Le bilan sert à évaluer
+     l'hypothèse comportementale, pas à juger le client.
+     ═══════════════════════════════════════════════════════════ -->
+<div id="s-bilan" class="screen">
+  <div class="seance-wrap">
+    <div class="top-bar" style="margin-bottom:20px">
+      <div>
+        <div class="page-title">Bilan de ton expérience</div>
+        <div class="page-sub">Tu viens de tester une nouvelle manière d'agir. L'objectif n'est pas de savoir si tu as été « bon » ou « mauvais », mais de comprendre ce qui a fonctionné, ce qui a résisté, et ce que ton système vient de t'apprendre.</div>
+      </div>
+      <button class="btn-ghost" onclick="goHub()" style="font-size:13px">⌂ Accueil</button>
+    </div>
+
+    <div id="bilan-loading" style="color:rgba(245,240,232,.6);font-size:14px;padding:20px 0">Chargement...</div>
+    <div id="bilan-error" style="display:none;color:#e0847e;font-size:14px;padding:20px 0"></div>
+
+    <!-- Résumé du cycle -->
+    <div id="bilan-summary" class="score-block" style="display:none">
+      <div class="score-block-name" id="bilan-summary-name"></div>
+      <div class="score-question" style="font-style:normal" id="bilan-summary-details"></div>
+    </div>
+
+    <!-- Vue lecture seule si déjà évalué -->
+    <div id="bilan-readonly" style="display:none"></div>
+
+    <!-- Formulaire de bilan -->
+    <div id="bilan-form" style="display:none">
+
+      <div class="score-block">
+        <div class="score-block-name"><div class="score-dot" style="background:#F5F0E8"></div>Réalité <span class="required">Obligatoire</span></div>
+        <div class="score-question">Qu'est-ce qui s'est réellement passé ? Décris ce que tu as réellement observé pendant cette expérience — pas ce que tu avais prévu de faire.</div>
+        <textarea class="just-input" id="bilan-realite" placeholder="Ta réponse..."></textarea>
+        <div class="field-err" id="bilan-realite-err">Ce champ est obligatoire.</div>
+      </div>
+
+      <div class="score-block">
+        <div class="score-block-name"><div class="score-dot" style="background:#E0C87E"></div>Résultat</div>
+        <div class="score-question">Quel résultat concret cette expérience a-t-elle produit ?</div>
+        <div class="slider-row">
+          <input type="range" class="slider" id="bilan-sl-resultat" min="1" max="5" value="3" oninput="updateBilanSlider('resultat')" style="accent-color:#E0C87E"/>
+          <div class="slider-val" id="bilan-val-resultat" style="color:#E0C87E">3</div>
+        </div>
+        <div class="just-label" style="margin-top:6px">Qu'est-ce qui te permet de l'affirmer ?</div>
+        <textarea class="just-input" id="bilan-resultat-justif" placeholder="Ta réponse..."></textarea>
+      </div>
+
+      <div class="score-block">
+        <div class="score-block-name"><div class="score-dot" style="background:#8fbf8f"></div>Facilité</div>
+        <div class="score-question">À quel point cette expérience était-elle facile à appliquer ?</div>
+        <div class="slider-row">
+          <input type="range" class="slider" id="bilan-sl-facilite" min="1" max="5" value="3" oninput="updateBilanSlider('facilite')" style="accent-color:#8fbf8f"/>
+          <div class="slider-val" id="bilan-val-facilite" style="color:#8fbf8f">3</div>
+        </div>
+        <div class="just-label" style="margin-top:6px">Principal facteur</div>
+        <select id="bilan-facteur" style="width:100%;padding:11px 14px;background:rgba(245,240,232,.055);border:1.5px solid rgba(245,240,232,.14);color:var(--creme);font-family:'Barlow',sans-serif;font-size:14px;border-radius:6px;outline:none">
+          <option value="Temps">Temps</option>
+          <option value="Énergie">Énergie</option>
+          <option value="Environnement">Environnement</option>
+          <option value="Émotion">Émotion</option>
+          <option value="Oubli">Oubli</option>
+          <option value="Complexité">Complexité</option>
+          <option value="Déclencheur insuffisant">Déclencheur insuffisant</option>
+          <option value="Autre">Autre</option>
+        </select>
+      </div>
+
+      <div class="score-block">
+        <div class="score-block-name"><div class="score-dot" style="background:#c9a84c"></div>Identité</div>
+        <div class="score-question">Cette expérience t'a-t-elle rapproché de la personne que tu veux devenir ?</div>
+        <div class="slider-row">
+          <input type="range" class="slider" id="bilan-sl-identite" min="1" max="5" value="3" oninput="updateBilanSlider('identite')" style="accent-color:#c9a84c"/>
+          <div class="slider-val" id="bilan-val-identite" style="color:#c9a84c">3</div>
+        </div>
+        <div class="just-label" style="margin-top:6px">Quel comportement te permet de le constater ?</div>
+        <textarea class="just-input" id="bilan-identite-comportement" placeholder="Ta réponse..."></textarea>
+      </div>
+
+      <div class="score-block">
+        <div class="score-block-name"><div class="score-dot" style="background:#8fa8e0"></div>Alignement</div>
+        <div class="score-question">Cette expérience était-elle réellement alignée avec ton objectif ?</div>
+        <div class="slider-row">
+          <input type="range" class="slider" id="bilan-sl-alignement" min="1" max="5" value="3" oninput="updateBilanSlider('alignement')" style="accent-color:#8fa8e0"/>
+          <div class="slider-val" id="bilan-val-alignement" style="color:#8fa8e0">3</div>
+        </div>
+        <div class="just-label" style="margin-top:6px">Qu'est-ce qui montre cet alignement — ou ce manque d'alignement ?</div>
+        <textarea class="just-input" id="bilan-alignement-justif" placeholder="Ta réponse..."></textarea>
+      </div>
+
+      <div class="score-block" id="bilan-indicateur-moteur" style="color:rgba(245,240,232,.55);font-size:13px;font-style:italic">
+        L'indicateur spécifique à ton moteur (taux d'installation ou taux d'interception) sera disponible ici une fois que les check-ins quotidiens seront reliés à cette expérience.
+      </div>
+
+      <div class="score-block">
+        <div class="score-block-name"><div class="score-dot" style="background:#e0c87e"></div>Apprentissage <span class="required">Obligatoire</span></div>
+        <div class="score-question">Qu'as-tu découvert sur ton fonctionnement ? Quel déclencheur, obstacle, environnement, émotion ou condition semble avoir influencé ta capacité à agir ?</div>
+        <textarea class="just-input" id="bilan-apprentissage" placeholder="Ta réponse..."></textarea>
+        <div class="field-err" id="bilan-apprentissage-err">Ce champ est obligatoire.</div>
+      </div>
+
+      <div id="bilan-suggestion" style="display:none;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.25);border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:#D9BC66;line-height:1.5"></div>
+
+      <div class="score-block">
+        <div class="score-block-name">Que devons-nous faire de cette expérience ?</div>
+        <div id="bilan-decision-choices" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+        <div class="field-err" id="bilan-decision-err">Choisis une décision avant de valider.</div>
+      </div>
+
+      <button class="btn-ghost" id="btn-submit-bilan" onclick="submitBilan()" style="width:100%;padding:14px;margin-top:10px;font-size:13px;background:rgba(201,168,76,.12);border-color:var(--or)">
+        Enregistrer mon bilan
+      </button>
+    </div>
   </div>
 </div>
 
@@ -1734,6 +1855,211 @@ function renderPlan(answers) {
       + '</div>';
   });
   document.getElementById('plan-checklist').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════
+// NOUVEAU (26/08/2026) — Bilan de fin de cycle
+// ═══════════════════════════════════════════════════════════
+var BILAN_DECISIONS = [
+  { key: 'Continuer', color: '#8fbf8f' },
+  { key: 'Ajuster', color: '#c9a84c' },
+  { key: 'Simplifier', color: '#8fa8e0' },
+  { key: 'Renforcer', color: '#e0c87e' },
+  { key: "Changer d'hypothèse", color: '#e0847e' },
+  { key: 'Suspendre', color: 'rgba(245,240,232,.5)' },
+];
+var bilanCycleId = null;
+var bilanSelectedDecision = null;
+
+function updateBilanSlider(key) {
+  var val = document.getElementById('bilan-sl-' + key).value;
+  document.getElementById('bilan-val-' + key).textContent = val;
+  renderBilanSuggestion();
+}
+
+// Point 11 de la spec — suggestions informatives, jamais imposées. Le client
+// garde toujours la décision finale ; ceci n'est qu'une aide à la lecture.
+function renderBilanSuggestion() {
+  var facilite = parseInt(document.getElementById('bilan-sl-facilite').value, 10);
+  var resultat = parseInt(document.getElementById('bilan-sl-resultat').value, 10);
+  var alignement = parseInt(document.getElementById('bilan-sl-alignement').value, 10);
+  var box = document.getElementById('bilan-suggestion');
+  var msg = null;
+
+  if (facilite <= 2 && alignement >= 4) {
+    msg = "Facilité faible, mais alignement élevé — le système autour de l'action est peut-être trop exigeant. Une piste : simplifier, pas abandonner.";
+  } else if (facilite >= 4 && resultat <= 2) {
+    msg = "Facile à tenir, mais peu de résultat — ça vaut peut-être la peine de questionner l'hypothèse elle-même plutôt que de forcer davantage.";
+  } else if (resultat >= 4 && facilite <= 2) {
+    msg = "De bons résultats, mais difficile à tenir — un signe que ça mérite d'être renforcé ou automatisé plutôt que remis en question.";
+  } else if (resultat >= 4 && facilite >= 4) {
+    msg = "Résultat et facilité tous les deux élevés — un bon signal pour consolider ce qui est en place.";
+  }
+
+  if (msg) {
+    box.textContent = msg;
+    box.style.display = 'block';
+  } else {
+    box.style.display = 'none';
+  }
+}
+
+function renderBilanDecisionChoices() {
+  var html = '';
+  BILAN_DECISIONS.forEach(function(d) {
+    html += '<button type="button" onclick="selectBilanDecision(\'' + d.key + '\')" id="bilan-dec-' + d.key.replace(/[^a-zA-Z]/g, '') + '" '
+      + 'style="padding:10px 14px;font-size:12px;font-weight:600;border-radius:6px;cursor:pointer;'
+      + 'border:1.5px solid ' + d.color + ';background:transparent;color:' + d.color + '">' + d.key + '</button>';
+  });
+  document.getElementById('bilan-decision-choices').innerHTML = html;
+}
+
+function selectBilanDecision(key) {
+  bilanSelectedDecision = key;
+  document.getElementById('bilan-decision-err').style.display = 'none';
+  BILAN_DECISIONS.forEach(function(d) {
+    var btn = document.getElementById('bilan-dec-' + d.key.replace(/[^a-zA-Z]/g, ''));
+    var active = d.key === key;
+    btn.style.background = active ? d.color : 'transparent';
+    btn.style.color = active ? '#091132' : d.color;
+  });
+}
+
+function openBilan() {
+  showScreen('s-bilan');
+  document.getElementById('bilan-loading').style.display = 'block';
+  document.getElementById('bilan-error').style.display = 'none';
+  document.getElementById('bilan-summary').style.display = 'none';
+  document.getElementById('bilan-readonly').style.display = 'none';
+  document.getElementById('bilan-form').style.display = 'none';
+
+  fetch('/api/get-cycle-summary?code=' + encodeURIComponent(code))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      document.getElementById('bilan-loading').style.display = 'none';
+
+      if (!data.hasCycle) {
+        document.getElementById('bilan-error').textContent = "Aucun cycle en cours à évaluer pour l'instant.";
+        document.getElementById('bilan-error').style.display = 'block';
+        return;
+      }
+
+      bilanCycleId = data.cycleId;
+
+      document.getElementById('bilan-summary').style.display = 'block';
+      document.getElementById('bilan-summary-name').textContent = data.nomExperience + ' — ' + data.moteur;
+      var duree = '';
+      if (data.dateDebut && data.dateFin) duree = 'Du ' + data.dateDebut + ' au ' + data.dateFin + '.';
+      document.getElementById('bilan-summary-details').textContent = duree || (data.nomCycle || '');
+
+      if (data.alreadyEvaluated) {
+        renderBilanReadonly(data);
+        document.getElementById('bilan-readonly').style.display = 'block';
+        return;
+      }
+
+      renderBilanDecisionChoices();
+      document.getElementById('bilan-form').style.display = 'block';
+    })
+    .catch(function(e) {
+      document.getElementById('bilan-loading').style.display = 'none';
+      document.getElementById('bilan-error').textContent = "Erreur de chargement. Réessaie, ou préviens Franck.";
+      document.getElementById('bilan-error').style.display = 'block';
+      console.warn('Erreur get-cycle-summary :', e);
+    });
+}
+
+function renderBilanReadonly(data) {
+  var b = data.bilan || {};
+  var rows = [
+    ['Réalité', b.realiteObservee],
+    ['Résultat', (b.resultat || '—') + '/5 — ' + (b.resultatObserve || '')],
+    ['Facilité', (b.facilite || '—') + '/5 — ' + (b.facteurFaciliteDifficulte || '')],
+    ['Identité', (b.identite || '—') + '/5 — ' + (b.comportementIdentitaireObserve || '')],
+    ['Alignement', (b.alignement || '—') + '/5 — ' + (b.justificationAlignement || '')],
+    ['Apprentissage', b.apprentissage],
+    ['Décision', b.decisionSuivante],
+  ];
+  var html = '<div class="score-block-name" style="margin-bottom:14px">Ce bilan a déjà été rempli</div>';
+  rows.forEach(function(r) {
+    html += '<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid rgba(245,240,232,.1)">'
+      + '<div style="font-size:12px;color:var(--or);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">' + r[0] + '</div>'
+      + '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + (r[1] || '—') + '</div>'
+      + '</div>';
+  });
+  document.getElementById('bilan-readonly').innerHTML = '<div class="score-block">' + html + '</div>';
+}
+
+function submitBilan() {
+  var ok = true;
+
+  var realite = document.getElementById('bilan-realite').value.trim();
+  if (!realite || realite.length < 3) {
+    document.getElementById('bilan-realite').classList.add('error');
+    document.getElementById('bilan-realite-err').style.display = 'block';
+    ok = false;
+  } else {
+    document.getElementById('bilan-realite').classList.remove('error');
+    document.getElementById('bilan-realite-err').style.display = 'none';
+  }
+
+  var apprentissage = document.getElementById('bilan-apprentissage').value.trim();
+  if (!apprentissage || apprentissage.length < 3) {
+    document.getElementById('bilan-apprentissage').classList.add('error');
+    document.getElementById('bilan-apprentissage-err').style.display = 'block';
+    ok = false;
+  } else {
+    document.getElementById('bilan-apprentissage').classList.remove('error');
+    document.getElementById('bilan-apprentissage-err').style.display = 'none';
+  }
+
+  if (!bilanSelectedDecision) {
+    document.getElementById('bilan-decision-err').style.display = 'block';
+    ok = false;
+  }
+
+  if (!ok) return;
+
+  var btn = document.getElementById('btn-submit-bilan');
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement...';
+
+  fetch('/api/save-cycle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      code: code,
+      cycleId: bilanCycleId,
+      realiteObservee: realite,
+      resultat: parseInt(document.getElementById('bilan-sl-resultat').value, 10),
+      resultatObserve: document.getElementById('bilan-resultat-justif').value.trim(),
+      facilite: parseInt(document.getElementById('bilan-sl-facilite').value, 10),
+      facteurFaciliteDifficulte: document.getElementById('bilan-facteur').value,
+      identite: parseInt(document.getElementById('bilan-sl-identite').value, 10),
+      comportementIdentitaireObserve: document.getElementById('bilan-identite-comportement').value.trim(),
+      alignement: parseInt(document.getElementById('bilan-sl-alignement').value, 10),
+      justificationAlignement: document.getElementById('bilan-alignement-justif').value.trim(),
+      apprentissage: apprentissage,
+      decisionSuivante: bilanSelectedDecision,
+    }),
+  })
+    .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+    .then(function(result) {
+      btn.disabled = false;
+      btn.textContent = 'Enregistrer mon bilan';
+      if (!result.ok) {
+        alert(result.data.error || "Une erreur est survenue. Préviens Franck.");
+        return;
+      }
+      document.getElementById('bilan-form').style.display = 'none';
+      openBilan(); // recharge en vue lecture seule, depuis le serveur
+    })
+    .catch(function(e) {
+      btn.disabled = false;
+      btn.textContent = 'Enregistrer mon bilan';
+      alert("Erreur réseau. Réessaie, ou préviens Franck si ça persiste.");
+      console.warn('Erreur save-cycle (bilan) :', e);
+    });
 }
 
 // ── UTILS ────────────────────────────────────────────────
