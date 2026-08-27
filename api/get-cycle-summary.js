@@ -85,6 +85,46 @@ export default async function handler(req, res) {
     const decisionName = extractSelectName(latest.fields['Décision suivante']);
     const alreadyEvaluated = !!decisionName;
 
+    // NOUVEAU (27/08/2026) — Calcul du taux spécifique au moteur, à partir
+    // des vraies données de CSR_Checkins pour CE cycle précis. Le client n'a
+    // jamais à faire ce calcul lui-même. Si aucun point du jour n'existe
+    // encore pour ce cycle, l'indicateur reste absent plutôt que simulé.
+    const TABLE_CHECKINS = 'CSR_Checkins';
+    const checkinsUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CHECKINS}?pageSize=100`;
+    const checkinsRes = await fetch(checkinsUrl, { headers });
+    const checkinsData = await checkinsRes.json();
+    const cycleCheckins = (checkinsData.records || []).filter(
+      (r) => Array.isArray(r.fields['Cycle']) && r.fields['Cycle'].includes(latest.id)
+    );
+
+    let indicateur = null;
+    if (cycleCheckins.length > 0) {
+      const opportunites = cycleCheckins.filter(
+        (r) => extractSelectName(r.fields['Signal émotionnel apparu']) === 'Oui'
+      );
+      if (opportunites.length > 0) {
+        if (moteur === 'ANCRAGE') {
+          const reussies = opportunites.filter((r) => extractSelectName(r.fields['Action réalisée']) === 'Oui');
+          indicateur = {
+            type: "Taux d'installation",
+            valeur: reussies.length,
+            total: opportunites.length,
+            pourcentage: Math.round((reussies.length / opportunites.length) * 100),
+            avertissement: 'Ce chiffre repose sur ce que tu as toi-même rapporté — pas sur une mesure automatique de tous les moments où le signal est apparu.',
+          };
+        } else if (moteur === 'RUPTURE') {
+          const reussies = opportunites.filter((r) => extractSelectName(r.fields['Interception réussie']) === 'Oui');
+          indicateur = {
+            type: "Taux d'interception",
+            valeur: reussies.length,
+            total: opportunites.length,
+            pourcentage: Math.round((reussies.length / opportunites.length) * 100),
+            avertissement: 'Ce chiffre repose sur ce que tu as toi-même rapporté — pas sur une mesure automatique de tous les moments où le signal est apparu.',
+          };
+        }
+      }
+    }
+
     return res.status(200).json({
       hasCycle: true,
       cycleId: latest.id,
@@ -97,6 +137,7 @@ export default async function handler(req, res) {
       moteur,
       nomExperience,
       experienceId: experienceRecordId,
+      indicateur,
       bilan: alreadyEvaluated
         ? {
             realiteObservee: latest.fields['Réalité observée'] || null,
