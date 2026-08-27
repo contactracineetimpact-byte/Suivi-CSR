@@ -106,7 +106,7 @@ export default async function handler(req, res) {
         if (moteur === 'ANCRAGE') {
           const reussies = opportunites.filter((r) => extractSelectName(r.fields['Action réalisée']) === 'Oui');
           indicateur = {
-            type: "Taux d'installation",
+            type: "Combien de fois tu as réussi",
             valeur: reussies.length,
             total: opportunites.length,
             pourcentage: Math.round((reussies.length / opportunites.length) * 100),
@@ -115,7 +115,7 @@ export default async function handler(req, res) {
         } else if (moteur === 'RUPTURE') {
           const reussies = opportunites.filter((r) => extractSelectName(r.fields['Interception réussie']) === 'Oui');
           indicateur = {
-            type: "Taux d'interception",
+            type: "Combien de fois tu as réussi à ne pas le faire",
             valeur: reussies.length,
             total: opportunites.length,
             pourcentage: Math.round((reussies.length / opportunites.length) * 100),
