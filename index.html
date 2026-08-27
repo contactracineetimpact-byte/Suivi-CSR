@@ -610,7 +610,7 @@ canvas{width:100%;height:100%}
       </div>
 
       <div class="score-block" id="bilan-indicateur-moteur" style="color:rgba(245,240,232,.55);font-size:13px;font-style:italic">
-        L'indicateur spécifique à ton moteur (taux d'installation ou taux d'interception) sera disponible ici une fois que les check-ins quotidiens seront reliés à cette expérience.
+        L'indicateur spécifique à ton moteur (taux d'installation ou taux d'interception) sera disponible ici une fois que ton suivi quotidien sera relié à cette expérience.
       </div>
 
       <div class="score-block">
@@ -2121,13 +2121,13 @@ function pcRenderStep(step) {
     );
   } else if (step === 'interception') {
     pcWrap(
-      '🛑 As-tu interrompu l\'ancien comportement (' + (pcContext.ancienComportement || '...') + ') ?',
+      '🛑 Tu as réussi à ne pas le faire (' + (pcContext.ancienComportement || '...') + ') ?',
       null,
       pcButton('Oui', "pcAnswerInterception('Oui')", '#8fbf8f') + pcButton('Non', "pcAnswerInterception('Non')", '#e0847e')
     );
   } else if (step === 'retourAncien') {
     pcWrap(
-      'Es-tu revenu à l\'ancien comportement ?',
+      'Es-tu quand même retombé dedans ?',
       null,
       pcButton('Oui', "pcAnswerRetourAncien('Oui')", '#e0847e') + pcButton('Non', "pcAnswerRetourAncien('Non')")
     );
@@ -2153,7 +2153,7 @@ function pcRenderStep(step) {
       '<div style="text-align:center;padding:14px 10px">'
       + '<div style="font-size:26px;margin-bottom:8px">✓</div>'
       + (preuve ? '<div style="font-size:13px;color:#C9A84C;margin-bottom:6px">✅ Preuve : ' + escapeHtml(preuve) + '</div>' : '')
-      + '<div style="font-size:13px;color:rgba(245,240,232,.6)">Check-in enregistré. À demain.</div>'
+      + '<div style="font-size:13px;color:rgba(245,240,232,.6)">C\'est noté. À demain. 🌱</div>'
       + '</div>';
   } else if (step === 'duplicate') {
     document.getElementById('today-card').innerHTML =
