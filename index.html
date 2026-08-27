@@ -2170,13 +2170,20 @@ function pcRenderStep(step) {
       + '<button class="btn-engage" onclick="pcSubmitJusteAvant()">Enregistrer</button>';
     document.getElementById('today-card').innerHTML = html2;
   } else if (step === 'done') {
+    var success = (pcAnswers.actionRealisee === 'Oui') || (pcAnswers.interceptionReussie === 'Oui');
+    var noSignal = (pcAnswers.signal === 'Non');
     var preuve = pcContext.preuve || '';
-    document.getElementById('today-card').innerHTML =
-      '<div style="text-align:center;padding:14px 10px">'
-      + '<div style="font-size:26px;margin-bottom:8px">✓</div>'
-      + (preuve ? '<div style="font-size:13px;color:#C9A84C;margin-bottom:6px">✅ Preuve : ' + escapeHtml(preuve) + '</div>' : '')
-      + '<div style="font-size:13px;color:rgba(245,240,232,.6)">C\'est noté. À demain. 🌱</div>'
-      + '</div>';
+    var icon = noSignal ? '·' : (success ? '✓' : '🌱');
+    var message = noSignal
+      ? "Pas de signal aujourd'hui. C'est noté. À demain."
+      : (success ? 'C\'est noté. À demain. 🌱' : 'C\'est noté aussi. Ça arrive. À demain.');
+    var html3 = '<div style="text-align:center;padding:14px 10px">'
+      + '<div style="font-size:26px;margin-bottom:8px">' + icon + '</div>';
+    if (success && preuve) {
+      html3 += '<div style="font-size:13px;color:#C9A84C;margin-bottom:6px">✅ Preuve : ' + escapeHtml(preuve) + '</div>';
+    }
+    html3 += '<div style="font-size:13px;color:rgba(245,240,232,.6)">' + message + '</div></div>';
+    document.getElementById('today-card').innerHTML = html3;
   } else if (step === 'duplicate') {
     document.getElementById('today-card').innerHTML =
       '<div style="text-align:center;padding:14px 10px">'
