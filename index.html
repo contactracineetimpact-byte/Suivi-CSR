@@ -871,6 +871,7 @@ function showDashboard() {
   renderEncouragement();
   initTodayDraft();
   renderToday();
+  checkPersonalizedCheckin();
   renderHowto();
   checkMissedDay();
   renderHubHint();
@@ -1263,6 +1264,7 @@ function showNav(nav) {
   if (nav === 'home') {
     initTodayDraft();
     renderToday();
+    checkPersonalizedCheckin();
     renderHowto();
     checkMissedDay();
   }
@@ -2063,7 +2065,159 @@ function submitBilan() {
     });
 }
 
-// ── UTILS ────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// NOUVEAU (27/08/2026) — Check-in comportemental quotidien personnalisé.
+// Remplace la carte "Aujourd'hui" générique UNIQUEMENT si le client a une
+// expérience ANCRAGE/RUPTURE active et verrouillée. Sinon, l'ancien système
+// à 4 racines reste affiché tel quel — rien n'est supprimé, juste masqué
+// pour ce client précis.
+// ═══════════════════════════════════════════════════════════
+var pcMoteur = null;
+var pcContext = null;
+var pcAnswers = {};
+
+function checkPersonalizedCheckin() {
+  fetch('/api/get-experience?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.hasExperience && data.locked && data.checkinContext) {
+        pcMoteur = data.moteur;
+        pcContext = data.checkinContext;
+        pcAnswers = {};
+        pcRenderStep('signal');
+      }
+      // Si pas d'expérience active/verrouillée : on ne touche à rien,
+      // l'ancien système déjà rendu par renderToday() reste visible.
+    })
+    .catch(function(e) { console.warn('checkPersonalizedCheckin :', e); });
+}
+
+function pcButton(label, onclick, color) {
+  return '<button type="button" onclick="' + onclick + '" style="flex:1;padding:14px 10px;font-size:14px;font-weight:700;'
+    + 'border-radius:8px;cursor:pointer;border:1.5px solid ' + (color || '#C9A84C') + ';background:transparent;color:' + (color || '#C9A84C') + '">'
+    + label + '</button>';
+}
+
+function pcWrap(title, subtitle, buttonsHtml) {
+  var html = '<div class="action-eyebrow">' + (pcMoteur === 'ANCRAGE' ? 'ANCRAGE' : 'RUPTURE') + ' — Aujourd\'hui</div>';
+  html += '<div class="action-question" style="font-size:19px">' + title + '</div>';
+  if (subtitle) html += '<div style="font-size:13px;color:rgba(245,240,232,.6);margin-bottom:14px;font-style:italic">' + escapeHtml(subtitle) + '</div>';
+  html += '<div style="display:flex;gap:10px;margin-top:10px">' + buttonsHtml + '</div>';
+  document.getElementById('today-card').innerHTML = html;
+}
+
+function pcRenderStep(step) {
+  if (step === 'signal') {
+    pcWrap(
+      '🧠 Ton signal est apparu aujourd\'hui ?',
+      pcContext.signal,
+      pcButton('Oui', "pcAnswerSignal('Oui')", '#8fbf8f') + pcButton('Non', "pcAnswerSignal('Non')")
+    );
+  } else if (step === 'action') {
+    pcWrap(
+      '⚡ As-tu fait ton action ?',
+      pcContext.action,
+      pcButton('Oui', "pcAnswerAction('Oui')", '#8fbf8f') + pcButton('Partiellement', "pcAnswerAction('Partiellement')") + pcButton('Non', "pcAnswerAction('Non')", '#e0847e')
+    );
+  } else if (step === 'interception') {
+    pcWrap(
+      '🛑 As-tu interrompu l\'ancien comportement (' + (pcContext.ancienComportement || '...') + ') ?',
+      null,
+      pcButton('Oui', "pcAnswerInterception('Oui')", '#8fbf8f') + pcButton('Non', "pcAnswerInterception('Non')", '#e0847e')
+    );
+  } else if (step === 'retourAncien') {
+    pcWrap(
+      'Es-tu revenu à l\'ancien comportement ?',
+      null,
+      pcButton('Oui', "pcAnswerRetourAncien('Oui')", '#e0847e') + pcButton('Non', "pcAnswerRetourAncien('Non')")
+    );
+  } else if (step === 'obstacle') {
+    var opts = ['Fatigue', 'Oubli', 'Émotion', 'Environnement', 'Autre'];
+    var html = '<div class="action-eyebrow">' + (pcMoteur === 'ANCRAGE' ? 'ANCRAGE' : 'RUPTURE') + ' — Aujourd\'hui</div>'
+      + '<div class="action-question" style="font-size:19px">Qu\'est-ce qui t\'a empêché ?</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">';
+    opts.forEach(function(o) {
+      html += '<button type="button" onclick="pcAnswerObstacle(\'' + o + '\')" style="padding:10px 14px;font-size:13px;border-radius:8px;cursor:pointer;border:1.5px solid rgba(245,240,232,.3);background:transparent;color:#EDEBE3">' + o + '</button>';
+    });
+    html += '</div>';
+    document.getElementById('today-card').innerHTML = html;
+  } else if (step === 'justeAvant') {
+    var html2 = '<div class="action-eyebrow">RUPTURE — Aujourd\'hui</div>'
+      + '<div class="action-question" style="font-size:19px">Qu\'est-ce qui s\'est passé juste avant ?</div>'
+      + '<textarea class="action-input" id="pc-juste-avant" placeholder="Ta réponse..."></textarea>'
+      + '<button class="btn-engage" onclick="pcSubmitJusteAvant()">Enregistrer</button>';
+    document.getElementById('today-card').innerHTML = html2;
+  } else if (step === 'done') {
+    var preuve = pcContext.preuve || '';
+    document.getElementById('today-card').innerHTML =
+      '<div style="text-align:center;padding:14px 10px">'
+      + '<div style="font-size:26px;margin-bottom:8px">✓</div>'
+      + (preuve ? '<div style="font-size:13px;color:#C9A84C;margin-bottom:6px">✅ Preuve : ' + escapeHtml(preuve) + '</div>' : '')
+      + '<div style="font-size:13px;color:rgba(245,240,232,.6)">Check-in enregistré. À demain.</div>'
+      + '</div>';
+  } else if (step === 'duplicate') {
+    document.getElementById('today-card').innerHTML =
+      '<div style="text-align:center;padding:14px 10px">'
+      + '<div style="font-size:14px;color:#D9BC66;margin-bottom:14px">Tu as déjà répondu aujourd\'hui. Le signal est réapparu une autre fois ?</div>'
+      + '<button class="btn-engage" onclick="pcSubmit(true)">Ajouter ce nouveau moment</button>'
+      + '</div>';
+  }
+}
+
+function pcAnswerSignal(val) {
+  pcAnswers.signal = val;
+  if (val === 'Non') { pcSubmit(); return; }
+  pcRenderStep(pcMoteur === 'ANCRAGE' ? 'action' : 'interception');
+}
+function pcAnswerAction(val) {
+  pcAnswers.actionRealisee = val;
+  if (val === 'Oui') { pcSubmit(); } else { pcRenderStep('obstacle'); }
+}
+function pcAnswerInterception(val) {
+  pcAnswers.interceptionReussie = val;
+  if (val === 'Oui') { pcSubmit(); } else { pcRenderStep('retourAncien'); }
+}
+function pcAnswerRetourAncien(val) {
+  pcAnswers.retourAncien = (val === 'Oui');
+  if (val === 'Oui') { pcRenderStep('justeAvant'); } else { pcSubmit(); }
+}
+function pcAnswerObstacle(val) {
+  pcAnswers.obstacle = val;
+  pcSubmit();
+}
+function pcSubmitJusteAvant() {
+  pcAnswers.cequiSestPasseAvant = document.getElementById('pc-juste-avant').value.trim();
+  pcSubmit();
+}
+
+function pcSubmit(confirmDuplicate) {
+  var body = Object.assign({ code: code }, pcAnswers);
+  if (confirmDuplicate) body.confirmDuplicate = true;
+
+  fetch('/api/save-checkin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+    .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, status: r.status, data: data }; }); })
+    .then(function(result) {
+      if (!result.ok && result.data.alreadyCheckedInToday) {
+        pcRenderStep('duplicate');
+        return;
+      }
+      if (!result.ok) {
+        alert(result.data.error || "Une erreur est survenue. Réessaie, ou préviens Franck.");
+        return;
+      }
+      pcRenderStep('done');
+    })
+    .catch(function(e) {
+      alert("Erreur réseau. Réessaie, ou préviens Franck si ça persiste.");
+      console.warn('Erreur save-checkin :', e);
+    });
+}
+
+
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(function(s) {
     s.classList.remove('active');
