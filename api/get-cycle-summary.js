@@ -102,7 +102,24 @@ export default async function handler(req, res) {
       const opportunites = cycleCheckins.filter(
         (r) => extractSelectName(r.fields['Signal émotionnel apparu']) === 'Oui'
       );
-      if (opportunites.length > 0) {
+
+      // NOUVEAU (28/08/2026) — Seuil de prudence statistique. Aucun seuil
+      // méthodologiquement défini n'existait ailleurs dans le code ; celui-ci
+      // (5) est choisi simplement parce qu'il correspond à la durée standard
+      // d'un cycle (3-5 jours) déjà utilisée partout dans la méthode — donc
+      // à peu près une opportunité par jour de cycle, pas un chiffre arbitraire
+      // sorti d'un calcul statistique. En dessous, on affiche un message
+      // prudent plutôt qu'un pourcentage qui donnerait une fausse impression
+      // de certitude sur très peu de données.
+      const SEUIL_MINIMUM_OBSERVATIONS = 5;
+
+      if (opportunites.length > 0 && opportunites.length < SEUIL_MINIMUM_OBSERVATIONS) {
+        indicateur = {
+          insuffisant: true,
+          observations: opportunites.length,
+          seuil: SEUIL_MINIMUM_OBSERVATIONS,
+        };
+      } else if (opportunites.length >= SEUIL_MINIMUM_OBSERVATIONS) {
         if (moteur === 'ANCRAGE') {
           const reussies = opportunites.filter((r) => extractSelectName(r.fields['Action réalisée']) === 'Oui');
           indicateur = {
