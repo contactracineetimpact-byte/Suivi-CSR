@@ -1288,9 +1288,10 @@ function updateSlider(key) {
 }
 
 function saveSeance() {
-  if (!seances.length && !load('program_start_' + code)) {
-    save('program_start_' + code, new Date().toISOString());
-  }
+  // (28/08/2026) — program_start_ n'est plus initialisé ici, déplacé vers
+  // confirmMoteurChoice() : le début du parcours 60 jours correspond
+  // désormais à la première expérience ANCRAGE/RUPTURE, pas à la première
+  // séance AO/AI/CE.
   var ok = true;
   ['ao','ai','ce'].forEach(function(k) {
     var val = document.getElementById('just-' + k).value.trim();
@@ -1744,6 +1745,13 @@ function confirmMoteurChoice() {
       }
       currentMoteur = pendingMoteur;
       currentExperienceId = result.data.experienceId;
+      // NOUVEAU (28/08/2026) — Le début du parcours 60 jours se déclenche
+      // désormais ici (première expérience ANCRAGE/RUPTURE réelle créée),
+      // plus à la première séance AO/AI/CE. Même garde-fou qu'avant : on
+      // n'écrase jamais une date déjà existante.
+      if (!load('program_start_' + code)) {
+        save('program_start_' + code, new Date().toISOString());
+      }
       showScreen('s-questionnaire');
       document.getElementById('quest-loading').style.display = 'none';
       document.getElementById('quest-error').style.display = 'none';
@@ -2291,6 +2299,24 @@ function renderContextualBanner() {
           + '<div class="action-question" style="font-size:20px">Ta première étape avec Franck t\'attend.</div>'
           + '<button class="btn-engage" onclick="openQuestionnaire()">Commencer →</button>'
           + '</div>';
+
+        // NOUVEAU (28/08/2026) — En État A, l'ancien rituel (routine-item /
+        // action-card) ne doit plus être présenté comme le parcours par
+        // défaut. renderToday() a déjà rempli #today-card à ce stade (elle
+        // n'est pas modifiée) ; on écrase simplement son contenu ici avec un
+        // état vide cohérent avec le nouveau parcours, sans toucher au code
+        // de l'ancien rituel lui-même.
+        var todayCardEl = document.getElementById('today-card');
+        if (todayCardEl) {
+          todayCardEl.innerHTML =
+            '<div style="text-align:center;padding:10px 6px">'
+            + '<div class="routine-title" style="text-align:center">Ton parcours commence ici</div>'
+            + '<div style="font-size:14px;color:rgba(245,240,232,.7);line-height:1.6;margin:10px 0 18px">'
+            + 'Configure ta première expérience avec Franck pour définir ce que tu veux changer et commencer ton accompagnement.'
+            + '</div>'
+            + '<button class="btn-engage" onclick="openQuestionnaire()" style="width:100%">Commencer avec Franck →</button>'
+            + '</div>';
+        }
         return;
       }
 
