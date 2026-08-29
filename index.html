@@ -654,6 +654,13 @@ canvas{width:100%;height:100%}
       </div>
     </div>
 
+    <!-- NOUVEAU (29/08/2026) — Bloc "Mon expérience" ANCRAGE/RUPTURE, V1.
+         Lecture seule, réutilise get-experience + get-cycle-summary déjà
+         existants. Masqué par défaut ; ne s'affiche que si une expérience
+         verrouillée existe. N'écrit jamais rien, ne remplace rien du
+         contenu legacy ci-dessous. -->
+    <div id="experience-progress-block" style="display:none;margin-bottom:14px"></div>
+
     <!-- Graphique -->
     <div class="chart-card">
       <div class="chart-title">Progression</div>
@@ -1252,6 +1259,7 @@ function showNav(nav) {
       seances.length + " séance" + (seances.length > 1 ? "s" : "");
     renderHistory();
     renderRacinesBilan();
+    renderExperienceProgress();
     setTimeout(renderChart, 100);
   }
   if (nav === 'seance') {
@@ -2112,11 +2120,11 @@ function submitBilan() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// NOUVEAU (27/08/2026) — Check-in comportemental quotidien personnalisé.
-// Remplace la carte "Aujourd'hui" générique UNIQUEMENT si le client a une
-// expérience ANCRAGE/RUPTURE active et verrouillée. Sinon, l'ancien système
-// à 4 racines reste affiché tel quel — rien n'est supprimé, juste masqué
-// pour ce client précis.
+// NOUVEAU (27/08/2026) — Point du jour comportemental quotidien
+// personnalisé. Remplace la carte "Aujourd'hui" générique UNIQUEMENT si le
+// client a une expérience ANCRAGE/RUPTURE active et verrouillée. Sinon,
+// l'ancien système à 4 racines reste affiché tel quel — rien n'est
+// supprimé, juste masqué pour ce client précis.
 // ═══════════════════════════════════════════════════════════
 var pcMoteur = null;
 var pcContext = null;
@@ -2283,6 +2291,20 @@ function pcSubmit(confirmDuplicate) {
 // séances sont enregistrées après coup, jamais planifiées à l'avance).
 // Signalé à Franck plutôt qu'inventé.
 // ═══════════════════════════════════════════════════════════
+
+// Détermine si le dernier cycle connu est "terminé" (dateFin dépassée et
+// pas encore évalué) — logique UNIQUE, partagée par renderContextualBanner()
+// et renderExperienceProgress(), pour que toute l'app réponde pareil à la
+// question "ce cycle est-il actif ou terminé ?".
+function isCycleTermine(cycleData) {
+  if (!cycleData || !cycleData.hasCycle || cycleData.alreadyEvaluated || !cycleData.dateFin) return false;
+  var dateFin = new Date(cycleData.dateFin);
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+  dateFin.setHours(0, 0, 0, 0);
+  return dateFin <= today;
+}
+
 function renderContextualBanner() {
   var el = document.getElementById('contextual-banner');
   if (!el) return;
@@ -2293,7 +2315,7 @@ function renderContextualBanner() {
       // (28/08/2026, corrigé le même jour) — On réaffiche #today-card par
       // défaut à chaque calcul frais, pour ne jamais la laisser masquée
       // durablement après un passage en État A suivi de la création d'une
-      // expérience (sinon le check-in personnalisé resterait invisible).
+      // expérience (sinon le point du jour personnalisé resterait invisible).
       var todayCardElReset = document.getElementById('today-card');
       if (todayCardElReset) todayCardElReset.style.display = '';
 
@@ -2344,14 +2366,7 @@ function renderContextualBanner() {
         .then(function(cycleData) {
           el.style.display = 'block';
 
-          var cycleTermine = false;
-          if (cycleData.hasCycle && !cycleData.alreadyEvaluated && cycleData.dateFin) {
-            var dateFin = new Date(cycleData.dateFin);
-            var today = new Date();
-            today.setHours(0, 0, 0, 0);
-            dateFin.setHours(0, 0, 0, 0);
-            cycleTermine = dateFin <= today;
-          }
+          var cycleTermine = isCycleTermine(cycleData);
 
           if (cycleTermine) {
             // État C — cycle terminé, bilan attendu. Priorité sur le quotidien.
@@ -2389,6 +2404,107 @@ function renderContextualBanner() {
         .catch(function(e) { console.warn('renderContextualBanner (cycle) :', e); });
     })
     .catch(function(e) { console.warn('renderContextualBanner (experience) :', e); });
+}
+
+// ═══════════════════════════════════════════════════════════
+// NOUVEAU (29/08/2026) — Bloc "Mon expérience" sur Progression (s-tableau).
+// V1 volontairement minimale : lecture seule, réutilise get-experience et
+// get-cycle-summary déjà existants (aucune nouvelle API, aucune écriture).
+// Réutilise isCycleTermine() — même définition qu'en Accueil, pour que
+// l'app entière ait une seule notion de "cycle actif" vs "cycle terminé".
+// N'apparaît que si l'expérience est verrouillée ; masqué dans tous les
+// autres cas (pas d'expérience, ou expérience non verrouillée — cet état
+// reste géré uniquement par la bannière d'accueil). Fail-safe : toute
+// erreur réseau laisse le bloc invisible et ne touche à rien d'autre.
+// ═══════════════════════════════════════════════════════════
+function renderExperienceProgress() {
+  var el = document.getElementById('experience-progress-block');
+  if (!el) return;
+  el.style.display = 'none';
+  el.innerHTML = '';
+
+  fetch('/api/get-experience?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
+    .then(function(r) { return r.json(); })
+    .then(function(expData) {
+      // Pas d'expérience, ou expérience pas encore verrouillée : rien à
+      // montrer dans cette V1 — la bannière d'accueil gère déjà cet état.
+      if (!expData.hasExperience || !expData.locked) return;
+
+      return fetch('/api/get-cycle-summary?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
+        .then(function(r) { return r.json(); })
+        .then(function(cycleData) {
+          var moteurLabel = expData.moteur === 'ANCRAGE' ? 'ANCRAGE' : 'RUPTURE';
+          var cycleLabel = cycleData && cycleData.hasCycle && cycleData.nomCycle ? cycleData.nomCycle : null;
+
+          var actionTexte = expData.checkinContext
+            ? (expData.moteur === 'ANCRAGE' ? expData.checkinContext.action : expData.checkinContext.alternative)
+            : null;
+
+          var jourTexte = '';
+          var start = load('program_start_' + code);
+          if (start) {
+            var startDate = new Date(start);
+            var today = new Date();
+            var dayNum = Math.floor((today - startDate) / 86400000) + 1;
+            dayNum = Math.max(1, Math.min(dayNum, 60));
+            jourTexte = 'Jour ' + dayNum + ' / 60';
+          }
+
+          var html = '<div class="chart-card">';
+          html += '<div class="chart-title">Mon expérience</div>';
+          html += '<div class="score-block-name" style="margin-bottom:10px">'
+            + moteurLabel + (cycleLabel ? ' — ' + escapeHtml(cycleLabel) : '') + '</div>';
+
+          html += '<div style="margin-bottom:14px">'
+            + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">Ce que je cherche à changer</div>'
+            + '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(expData.objectif || '—') + '</div>'
+            + '</div>';
+
+          if (actionTexte) {
+            html += '<div style="margin-bottom:14px">'
+              + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">Ce que je teste</div>'
+              + '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(actionTexte) + '</div>'
+              + '</div>';
+          }
+
+          // Apprentissage / décision : uniquement si le dernier cycle est
+          // réellement évalué. Si le cycle est terminé mais pas encore
+          // évalué (alreadyEvaluated === false), on n'affiche ni ces deux
+          // champs ni aucun message de substitution — ce bloc est une
+          // preuve de progression, pas un système d'alerte ; l'invitation
+          // à faire le bilan relève du parcours "Rendez-vous", pas d'ici.
+          if (cycleData && cycleData.alreadyEvaluated && cycleData.bilan) {
+            if (cycleData.bilan.apprentissage) {
+              html += '<div style="margin-bottom:14px">'
+                + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">Ce que j\'ai appris</div>'
+                + '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(cycleData.bilan.apprentissage) + '</div>'
+                + '</div>';
+            }
+            if (cycleData.bilan.decisionSuivante) {
+              html += '<div style="margin-bottom:14px">'
+                + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">Ma prochaine décision</div>'
+                + '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(cycleData.bilan.decisionSuivante) + '</div>'
+                + '</div>';
+            }
+          }
+
+          if (jourTexte) {
+            html += '<div style="font-size:12px;color:rgba(245,240,232,.5)">' + jourTexte + '</div>';
+          }
+
+          html += '</div>';
+
+          el.innerHTML = html;
+          el.style.display = 'block';
+        });
+    })
+    .catch(function(e) {
+      // Fail-safe : toute erreur réseau laisse le bloc invisible, sans
+      // toucher au reste de l'écran (graphique/historique/racines legacy).
+      console.warn('renderExperienceProgress :', e);
+      el.style.display = 'none';
+      el.innerHTML = '';
+    });
 }
 
 function showScreen(id) {
