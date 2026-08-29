@@ -2290,32 +2290,37 @@ function renderContextualBanner() {
   fetch('/api/get-experience?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
     .then(function(r) { return r.json(); })
     .then(function(expData) {
+      // (28/08/2026, corrigé le même jour) — On réaffiche #today-card par
+      // défaut à chaque calcul frais, pour ne jamais la laisser masquée
+      // durablement après un passage en État A suivi de la création d'une
+      // expérience (sinon le check-in personnalisé resterait invisible).
+      var todayCardElReset = document.getElementById('today-card');
+      if (todayCardElReset) todayCardElReset.style.display = '';
+
       if (!expData.hasExperience) {
         // État A — aucune expérience active.
         el.style.display = 'block';
         el.innerHTML =
           '<div class="action-card" style="border-color:rgba(201,168,76,.35)">'
           + '<div class="action-eyebrow">Prochaine étape</div>'
-          + '<div class="action-question" style="font-size:20px">Ta première étape avec Franck t\'attend.</div>'
-          + '<button class="btn-engage" onclick="openQuestionnaire()">Commencer →</button>'
+          + '<div class="action-question" style="font-size:20px">Ton parcours commence ici.</div>'
+          + '<div style="font-size:14px;color:rgba(245,240,232,.7);line-height:1.6;margin:8px 0 16px">'
+          + 'Configure ta première expérience avec Franck pour définir ce que tu veux changer et commencer ton accompagnement.'
+          + '</div>'
+          + '<button class="btn-engage" onclick="openQuestionnaire()">Commencer avec Franck →</button>'
           + '</div>';
 
-        // NOUVEAU (28/08/2026) — En État A, l'ancien rituel (routine-item /
-        // action-card) ne doit plus être présenté comme le parcours par
-        // défaut. renderToday() a déjà rempli #today-card à ce stade (elle
-        // n'est pas modifiée) ; on écrase simplement son contenu ici avec un
-        // état vide cohérent avec le nouveau parcours, sans toucher au code
-        // de l'ancien rituel lui-même.
+        // (28/08/2026, corrigé le même jour) — Un seul message de démarrage
+        // doit être visible en État A. Il vit désormais uniquement dans
+        // cette bannière (cohérent avec les États B et C, qui utilisent
+        // déjà la bannière comme emplacement principal). La carte
+        // #today-card — qui affichait un second message + un second bouton
+        // "Commencer" redondant — est simplement masquée ici, sans afficher
+        // l'ancien rituel (renderToday() continue de s'exécuter sans
+        // modification, son résultat est juste caché à l'écran).
         var todayCardEl = document.getElementById('today-card');
         if (todayCardEl) {
-          todayCardEl.innerHTML =
-            '<div style="text-align:center;padding:10px 6px">'
-            + '<div class="routine-title" style="text-align:center">Ton parcours commence ici</div>'
-            + '<div style="font-size:14px;color:rgba(245,240,232,.7);line-height:1.6;margin:10px 0 18px">'
-            + 'Configure ta première expérience avec Franck pour définir ce que tu veux changer et commencer ton accompagnement.'
-            + '</div>'
-            + '<button class="btn-engage" onclick="openQuestionnaire()" style="width:100%">Commencer avec Franck →</button>'
-            + '</div>';
+          todayCardEl.style.display = 'none';
         }
         return;
       }
