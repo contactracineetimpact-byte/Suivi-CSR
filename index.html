@@ -2852,6 +2852,27 @@ function renderExperienceProgress() {
             html += '</div>';
           }
 
+          // ── CE QUI A CHANGÉ ─────────────────────────────────────────
+          // Chantier 8 : comparaison brute de la même réponse entre le
+          // premier et le dernier cycle — jamais de phrase d'interprétation
+          // ajoutée, seulement les deux réponses telles qu'écrites.
+          var evolutions = cycleData.evolutions || [];
+          if (evolutions.length > 0) {
+            html += '<div class="chart-card">';
+            html += '<div class="chart-title">Ce qui a changé</div>';
+            evolutions.forEach(function(ev, i) {
+              if (ev.question) {
+                html += '<div style="font-size:12px;color:rgba(245,240,232,.55);font-style:italic;margin-bottom:8px">' + escapeHtml(ev.question) + '</div>';
+              }
+              html += '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(245,240,232,.5);margin-bottom:2px">' + escapeHtml(ev.premiereCycleLabel || 'Premier cycle') + '</div>';
+              html += '<div style="font-size:14px;color:var(--creme);line-height:1.5;margin-bottom:8px">« ' + escapeHtml(ev.premiereReponse) + ' »</div>';
+              html += '<div style="text-align:center;color:var(--or);font-size:14px;opacity:.7">↓</div>';
+              html += '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin:6px 0 2px">' + escapeHtml(ev.derniereCycleLabel || 'Dernier cycle') + '</div>';
+              html += '<div style="font-size:14px;color:var(--creme);line-height:1.5' + (i < evolutions.length - 1 ? ';margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(245,240,232,.1)' : '') + '">« ' + escapeHtml(ev.derniereReponse) + ' »</div>';
+            });
+            html += '</div>';
+          }
+
           // ── NIVEAU 3 — MES PREUVES ─────────────────────────────────
           // Uniquement des faits comptés, jamais un score ou un
           // pourcentage de "réussite" fabriqué. Le ratio n'apparaît que
