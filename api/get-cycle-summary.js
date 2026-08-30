@@ -106,8 +106,59 @@ export default async function handler(req, res) {
         };
       });
 
-    // Un cycle est considéré "déjà évalué" si le champ Décision suivante a
-    // été rempli — c'est ce qui signe la fin du bilan.
+    // NOUVEAU (30/08/2026) — Chantier 8 : « Ce qui a changé ». Compare la
+    // première et la dernière réponse du client sur exactement 2 questions
+    // stables (objectif + action), identiques d'un cycle à l'autre pour un
+    // même moteur (libellés en dur dans QUESTIONS_ANCRAGE/RUPTURE côté
+    // client — vérifiés stables avant d'écrire ce code). Aucune
+    // interprétation : on affiche seulement si les deux réponses existent,
+    // proviennent bien de deux cycles distincts, et diffèrent textuellement.
+    let evolutions = [];
+    if (cycles.length >= 2) {
+      const ETAPES_COMPARABLES =
+        moteur === 'ANCRAGE'
+          ? [{ etape: 'A — Ambition', label: 'objectif' }, { etape: 'A — Agir', label: 'action' }]
+          : moteur === 'RUPTURE'
+          ? [{ etape: 'R — Résultat recherché', label: 'objectif' }, { etape: 'U — Utiliser l\'alternative', label: 'action' }]
+          : [];
+
+      if (ETAPES_COMPARABLES.length > 0) {
+        const premierCycleId = cycles[0].cycleId;
+        const dernierCycleId = cycles[cycles.length - 1].cycleId;
+
+        const TABLE_CONFIG = 'CSR_Configuration';
+        const configUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CONFIG}?pageSize=100`;
+        const configRes = await fetch(configUrl, { headers });
+        const configData = await configRes.json();
+        const configRecords = (configData.records || []).filter(
+          (r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(experienceRecordId)
+        );
+
+        const findReponse = (etape, cycleId) => {
+          const rec = configRecords.find(
+            (r) => r.fields['Étape'] === etape && Array.isArray(r.fields['Cycle']) && r.fields['Cycle'].includes(cycleId)
+          );
+          return rec ? { reponse: rec.fields['Réponse'] || null, question: rec.fields['Question'] || null } : null;
+        };
+
+        evolutions = ETAPES_COMPARABLES.map(({ etape, label }) => {
+          const premiere = findReponse(etape, premierCycleId);
+          const derniere = findReponse(etape, dernierCycleId);
+          if (!premiere || !derniere || !premiere.reponse || !derniere.reponse) return null;
+          if (premiere.reponse.trim() === derniere.reponse.trim()) return null; // pas de fausse évolution
+          return {
+            label,
+            question: derniere.question || premiere.question || null,
+            premiereCycleLabel: cycles[0].nomCycle,
+            premiereReponse: premiere.reponse,
+            derniereCycleLabel: cycles[cycles.length - 1].nomCycle,
+            derniereReponse: derniere.reponse,
+          };
+        }).filter(Boolean);
+      }
+    }
+
+
     // Extraction défensive : un champ singleSelect renvoie normalement un
     // objet {id, color, name}, mais on tolère aussi une chaîne brute pour
     // ne jamais planter sur un format inattendu.
@@ -209,6 +260,7 @@ export default async function handler(req, res) {
       indicateur,
       citations,
       totalObservations,
+      evolutions,
       cycles,
       bilan: alreadyEvaluated
         ? {
