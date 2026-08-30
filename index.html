@@ -2333,12 +2333,19 @@ function checkPersonalizedCheckin() {
       fetch('/api/get-cycle-summary?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
         .then(function(r) { return r.json(); })
         .then(function(cycleData) {
-          if (cycleData && cycleData.hasCycle && cycleData.alreadyEvaluated === true) {
-            // Cycle clos et déjà évalué : le point du jour de ce cycle ne
-            // doit plus être proposé. Le bloc "Ce cycle est terminé" de
-            // renderContextualBanner() porte déjà tout le contexte
-            // nécessaire — on masque simplement la carte, sans la
-            // remplacer par un second contenu.
+          // MIS À JOUR (30/08/2026) — Chantier 4A : le point du jour doit
+          // aussi rester masqué quand le cycle est terminé (date de fin
+          // dépassée) mais pas encore évalué (État C), pas seulement une
+          // fois le bilan réellement soumis (État D). isCycleTermine()
+          // répond déjà précisément à "terminé ET pas encore évalué" (elle
+          // exclut alreadyEvaluated=true dans sa propre définition) — les
+          // deux conditions ci-dessous sont donc mutuellement exclusives,
+          // combinées ici sans dupliquer aucun calcul de date.
+          if (cycleData && cycleData.hasCycle && (cycleData.alreadyEvaluated === true || isCycleTermine(cycleData))) {
+            // Cycle terminé (évalué ou non) : le point du jour de ce cycle
+            // ne doit plus être proposé. Le bloc contextuel de l'accueil
+            // (État C ou D) porte déjà tout le contexte nécessaire — on
+            // masque simplement la carte, sans la remplacer.
             pcCycleEvaluated = true;
             var todayCardEl = document.getElementById('today-card');
             if (todayCardEl) todayCardEl.style.display = 'none';
