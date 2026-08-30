@@ -148,6 +148,12 @@ canvas{width:100%;height:100%}
 .btn-cancel{flex:1;padding:13px;background:rgba(245,240,232,.06);border:1.5px solid rgba(245,240,232,.16);border-radius:6px;font-family:'Barlow',sans-serif;font-size:13px;font-weight:600;cursor:pointer;color:var(--creme)}
 .btn-danger{flex:1;padding:13px;background:rgba(245,240,232,.1);border:none;border-radius:6px;font-family:'Barlow',sans-serif;font-size:13px;font-weight:700;cursor:not-allowed;color:rgba(245,240,232,.4);transition:all .2s}
 .btn-danger.ready{background:#E05C4B;color:#fff;cursor:pointer}
+
+/* NOUVEAU (30/08/2026) — Correctif lisibilité du menu déroulant "Ce qui a
+   le plus joué" (#bilan-facteur), seul <select> de l'application. Le fond
+   natif du navigateur pour la liste d'options ignore le style inline du
+   <select> parent ; on le fixe explicitement ici. */
+#bilan-facteur, #bilan-facteur option{background-color:var(--bleu-fonce);color:var(--creme)}
 </style>
 </head>
 <body>
@@ -2375,6 +2381,29 @@ function renderContextualBanner() {
               + '<div class="action-eyebrow">Ton expérience est terminée</div>'
               + '<div class="action-question" style="font-size:20px">Il est temps de regarder ce que tes données montrent.</div>'
               + '<button class="btn-engage" onclick="openBilan()">Faire le bilan →</button>'
+              + '</div>';
+            return;
+          }
+
+          // NOUVEAU (30/08/2026) — État D : cycle terminé ET bilan déjà
+          // réalisé. Doit être vérifié avant la branche "État B" générique
+          // ci-dessous, sinon l'ancien objectif/l'ancienne action seraient
+          // réaffichés comme s'ils étaient toujours en cours — trompeur
+          // pour un client qui vient de décider "Suspendre" ou "Changer
+          // d'hypothèse". Ne déclenche AUCUNE création de cycle suivant :
+          // on affiche seulement ce qui vient de se terminer, ce qui en a
+          // été retenu (decisionSuivante), et que la prochaine étape reste
+          // à définir avec Franck.
+          if (cycleData && cycleData.hasCycle && cycleData.alreadyEvaluated) {
+            var decision = (cycleData.bilan && cycleData.bilan.decisionSuivante) || null;
+            el.innerHTML =
+              '<div class="action-card">'
+              + '<div class="action-eyebrow">Ce cycle est terminé</div>'
+              + '<div class="action-question" style="font-size:19px">' + escapeHtml(cycleData.nomCycle || 'Ton cycle') + ' est clos.</div>'
+              + (decision
+                  ? '<div style="font-size:14px;color:rgba(245,240,232,.7);line-height:1.6;margin-top:6px">Décision retenue : <b style="color:var(--creme)">' + escapeHtml(decision) + '</b></div>'
+                  : '')
+              + '<div style="font-size:13px;color:rgba(245,240,232,.55);margin-top:10px;font-style:italic">La prochaine étape reste à définir avec Franck.</div>'
               + '</div>';
             return;
           }
