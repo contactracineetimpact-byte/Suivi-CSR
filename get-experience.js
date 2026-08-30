@@ -4,6 +4,17 @@
 // client, renvoie le moteur (ANCRAGE/RUPTURE) et l'objectif de son expérience
 // active, pour que l'interface sache quel questionnaire afficher.
 //
+// MIS À JOUR (30/08/2026) — Modèle multi-cycle, Chantier 3 : les réponses de
+// configuration (CSR_Configuration) sont désormais scopées au cycle courant
+// plutôt qu'à l'expérience entière. Avant ce correctif, une expérience à
+// plusieurs cycles aurait mélangé les réponses de tous ses cycles, et la
+// résolution du checkinContext (findByEtape, qui prend la PREMIÈRE
+// correspondance) aurait silencieusement continué à utiliser les réponses
+// du cycle 1 même après la création d'un cycle 2 avec une nouvelle
+// hypothèse. Compatibilité explicitement préservée pour les clients
+// mono-cycle existants dont les réponses n'ont jamais eu de lien 'Cycle'
+// (voir disambiguation ci-dessous) — non-régression garantie pour eux.
+//
 // Appel : GET /api/get-experience?code=TEST-FRANCK
 
 export default async function handler(req, res) {
@@ -62,15 +73,56 @@ export default async function handler(req, res) {
 
     let planAnswers = null;
     let checkinContext = null;
+    let currentCycleId = null;
     if (isLocked) {
+      // Détermine le cycle courant (le plus récent) pour pouvoir y scoper
+      // les réponses de configuration — même logique de tri que
+      // get-cycle-summary.js et save-cycle.js, pour une seule définition
+      // cohérente de "cycle le plus récent" dans toute l'application.
+      const TABLE_CYCLES = 'CSR_Cycles';
+      const cyclesUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}?pageSize=100`;
+      const cyclesRes = await fetch(cyclesUrl, { headers });
+      const cyclesData = await cyclesRes.json();
+      const matchingCycles = (cyclesData.records || []).filter(
+        (r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(experienceRecordId)
+      );
+      if (matchingCycles.length > 0) {
+        matchingCycles.sort((a, b) => (b.fields['N° cycle'] || 0) - (a.fields['N° cycle'] || 0));
+        currentCycleId = matchingCycles[0].id;
+      }
+
       const TABLE_CONFIG = 'CSR_Configuration';
       const configUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CONFIG}?pageSize=100`;
       const configRes = await fetch(configUrl, { headers });
       const configData = await configRes.json();
       if (configData.records) {
-        const ownAnswers = configData.records.filter(
+        const allAnswersForExperience = configData.records.filter(
           (r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(experienceRecordId)
         );
+
+        // Disambiguation : si AU MOINS UNE réponse de cette expérience porte
+        // déjà un lien 'Cycle', on suppose que la migration vers le modèle
+        // multi-cycle est en cours pour cette expérience, et on scope
+        // strictement au cycle courant (currentCycleId) — sinon les
+        // anciennes réponses non liées d'un cycle 1 historique pourraient
+        // se mélanger à celles d'un cycle 2 fraîchement créé.
+        // Si AUCUNE réponse n'a jamais de lien 'Cycle' (expérience restée
+        // entièrement legacy, mono-cycle), on garde le comportement
+        // d'origine — toutes les réponses de l'expérience — pour ne jamais
+        // régresser sur les clients existants.
+        const hasAnyCycleLinkedAnswer = allAnswersForExperience.some(
+          (r) => Array.isArray(r.fields['Cycle']) && r.fields['Cycle'].length > 0
+        );
+
+        let ownAnswers;
+        if (hasAnyCycleLinkedAnswer && currentCycleId) {
+          ownAnswers = allAnswersForExperience.filter(
+            (r) => Array.isArray(r.fields['Cycle']) && r.fields['Cycle'].includes(currentCycleId)
+          );
+        } else {
+          ownAnswers = allAnswersForExperience;
+        }
+
         planAnswers = ownAnswers.map((r) => ({ etape: r.fields['Étape'], reponse: r.fields['Réponse'] }));
 
         // NOUVEAU (26/08/2026) — Résout le contexte personnalisé du check-in
@@ -106,6 +158,7 @@ export default async function handler(req, res) {
       nomExperience: expData.fields['Nom expérience'] || null,
       statut: statut || null,
       locked: isLocked,
+      currentCycleId: currentCycleId,
       planAnswers: planAnswers,
       checkinContext: checkinContext,
     });
