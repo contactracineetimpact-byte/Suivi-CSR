@@ -171,6 +171,16 @@ export default async function handler(req, res) {
     const decisionName = extractSelectName(latest.fields['Décision suivante']);
     const alreadyEvaluated = !!decisionName;
 
+    // NOUVEAU (30/08/2026) — Chantier 9 : « Tes preuves », cumulé sur TOUS
+    // les cycles de l'expérience active — pas seulement le dernier.
+    // Réutilise checkinsData (déjà chargé ci-dessous pour l'indicateur du
+    // cycle courant), filtré par Expérience plutôt que par le seul cycle
+    // latest. Aucun nouvel appel Airtable. Vocabulaire du 2e chiffre choisi
+    // selon ce que le champ mesure réellement pour chaque moteur : pour
+    // ANCRAGE, le signal identifié (conscience du déclencheur) ; pour
+    // RUPTURE, l'interception réussie (l'acte d'interrompre), cohérent
+    // avec le sens déjà présent dans indicateur.type ci-dessous.
+
     // NOUVEAU (27/08/2026) — Calcul du taux spécifique au moteur, à partir
     // des vraies données de CSR_Checkins pour CE cycle précis. Le client n'a
     // jamais à faire ce calcul lui-même. Si aucun point du jour n'existe
@@ -182,6 +192,35 @@ export default async function handler(req, res) {
     const cycleCheckins = (checkinsData.records || []).filter(
       (r) => Array.isArray(r.fields['Cycle']) && r.fields['Cycle'].includes(latest.id)
     );
+
+    const experienceCheckins = (checkinsData.records || []).filter(
+      (r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(experienceRecordId)
+    );
+    const signauxExperience = experienceCheckins.filter(
+      (r) => extractSelectName(r.fields['Signal émotionnel apparu']) === 'Oui'
+    );
+    const decisionsEnregistrees = cycles.filter((c) => c.decisionSuivante).length;
+    let preuves = null;
+    if (experienceCheckins.length > 0 || cycles.length > 0) {
+      let compteurSecondaire = 0;
+      let labelSecondaire = null;
+      if (moteur === 'ANCRAGE') {
+        compteurSecondaire = signauxExperience.length;
+        labelSecondaire = 'signal identifié';
+      } else if (moteur === 'RUPTURE') {
+        compteurSecondaire = signauxExperience.filter(
+          (r) => extractSelectName(r.fields['Interception réussie']) === 'Oui'
+        ).length;
+        labelSecondaire = 'interception réussie';
+      }
+      preuves = {
+        observations: experienceCheckins.length,
+        compteurSecondaire,
+        labelSecondaire,
+        cycles: cycles.length,
+        decisions: decisionsEnregistrees,
+      };
+    }
 
     let indicateur = null;
     let citations = [];
@@ -261,6 +300,7 @@ export default async function handler(req, res) {
       citations,
       totalObservations,
       evolutions,
+      preuves,
       cycles,
       bilan: alreadyEvaluated
         ? {
