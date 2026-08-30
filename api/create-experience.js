@@ -4,8 +4,26 @@
 // en direct par Franck pendant la séance). Cette route crée l'expérience
 // correspondante et la lie au client, une seule fois.
 //
+// MIS À JOUR (30/08/2026) — Modèle multi-cycle, Chantier 2 : une nouvelle
+// expérience peut désormais être créée alors qu'une expérience est déjà
+// liée, mais UNIQUEMENT si son statut est 'En pause', 'Consolidé' ou
+// 'Abandonné' (liste blanche stricte — tout le reste refuse, y compris un
+// statut absent/inconnu, par sécurité). L'ancienne expérience n'est JAMAIS
+// modifiée : ni son statut, ni ses champs, ni ses cycles liés — seul le
+// lien 'Expérience active' du client est remplacé, et seulement après
+// confirmation que la nouvelle expérience a bien été créée.
+//
 // Corps attendu (POST) : { code, moteur, objectif }
 // moteur doit être exactement "ANCRAGE" ou "RUPTURE".
+
+const STATUTS_PERMETTANT_NOUVELLE_EXPERIENCE = ['En pause', 'Consolidé', 'Abandonné'];
+
+function extractSelectName(field) {
+  if (!field) return null;
+  if (typeof field === 'string') return field;
+  if (typeof field === 'object' && field.name) return field.name;
+  return null;
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -44,19 +62,53 @@ export default async function handler(req, res) {
 
     const clientRecord = clientData.records[0];
 
-    // Sécurité : si une expérience est déjà liée, on ne la remplace jamais
-    // depuis cette route — le verrouillage se décide côté Franck, dans
-    // Airtable, pas via un appel client qu'on pourrait rejouer par erreur.
+    // 2. Si une expérience est déjà liée, son statut décide si une nouvelle
+    //    expérience peut être créée. Liste blanche stricte : seuls 'En
+    //    pause', 'Consolidé' et 'Abandonné' l'autorisent. 'Configuration',
+    //    'Test en cours', 'Changé de moteur', ou tout statut absent/non
+    //    reconnu refusent — jamais l'inverse (pas de liste noire), pour que
+    //    tout cas non prévu reste bloquant par défaut.
     const existingLinks = clientRecord.fields['Expérience active'];
+
     if (existingLinks && existingLinks.length > 0) {
-      return res.status(409).json({
-        error: 'Une expérience est déjà active pour ce client. Contacte Franck pour la modifier.',
-      });
+      const existingExperienceId = existingLinks[0];
+      const existingExpUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}/${existingExperienceId}`;
+      const existingExpRes = await fetch(existingExpUrl, { headers });
+
+      if (!existingExpRes.ok) {
+        // Lecture du statut impossible : on ne suppose rien, on refuse.
+        return res.status(409).json({
+          error: "Impossible de créer une nouvelle expérience : le statut de l'expérience actuelle n'est pas reconnu.",
+        });
+      }
+
+      const existingExpData = await existingExpRes.json();
+      const existingStatut = extractSelectName(existingExpData.fields['Statut']);
+
+      if (!STATUTS_PERMETTANT_NOUVELLE_EXPERIENCE.includes(existingStatut)) {
+        if (existingStatut === 'Configuration' || existingStatut === 'Test en cours') {
+          return res.status(409).json({
+            error: "Une expérience est déjà active pour ce client. Termine ou mets en pause l'expérience actuelle avant d'en créer une nouvelle.",
+          });
+        }
+        if (existingStatut === 'Changé de moteur') {
+          return res.status(409).json({
+            error: 'Cette expérience ne permet pas encore de créer une nouvelle expérience depuis cet état.',
+          });
+        }
+        // Statut absent, vide, ou toute valeur non reconnue.
+        return res.status(409).json({
+          error: "Impossible de créer une nouvelle expérience : le statut de l'expérience actuelle n'est pas reconnu.",
+        });
+      }
+      // Statut autorisé : on poursuit. L'ancienne expérience (existingExperienceId)
+      // n'est touchée nulle part dans ce qui suit — ni son statut, ni ses
+      // champs, ni ses cycles.
     }
 
     const prenom = clientRecord.fields['Prenom'] || clientRecord.fields['Prénom'] || code;
 
-    // 2. Créer l'expérience.
+    // 3. Créer la nouvelle expérience.
     const createExpRes = await fetch(
       `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}`,
       {
@@ -76,6 +128,8 @@ export default async function handler(req, res) {
     );
 
     if (!createExpRes.ok) {
+      // La création a échoué : on ne touche à rien côté client, l'ancien
+      // lien (s'il existait) reste exactement tel quel.
       const errText = await createExpRes.text();
       console.error('Échec création CSR_Expériences:', errText);
       throw new Error('Échec création expérience');
@@ -84,7 +138,10 @@ export default async function handler(req, res) {
     const createExpData = await createExpRes.json();
     const experienceRecordId = createExpData.id;
 
-    // 3. Lier l'expérience au client.
+    // 4. Lier la nouvelle expérience au client — remplace l'ancien lien
+    //    (s'il y en avait un) par la nouvelle, en un seul PATCH. On
+    //    n'exécute cette étape qu'après confirmation que la création
+    //    ci-dessus a bien réussi.
     const updateClientRes = await fetch(
       `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CLIENTS}/${clientRecord.id}`,
       {
@@ -97,9 +154,20 @@ export default async function handler(req, res) {
     );
 
     if (!updateClientRes.ok) {
+      // La nouvelle expérience existe bel et bien (elle a été créée avec
+      // succès à l'étape 3), mais la liaison au client a échoué. On ne
+      // prétend jamais que tout a réussi dans ce cas — on expose l'ID de
+      // l'expérience orpheline pour que le problème reste traçable plutôt
+      // que silencieux.
       const errText = await updateClientRes.text();
       console.error('Échec liaison client -> expérience:', errText);
-      throw new Error('Échec liaison client');
+      return res.status(207).json({
+        success: false,
+        experienceCreee: true,
+        experienceId: experienceRecordId,
+        liaisonClientReussie: false,
+        error: "L'expérience a été créée mais n'a pas pu être liée au client. Intervention manuelle nécessaire.",
+      });
     }
 
     return res.status(200).json({ success: true, experienceId: experienceRecordId, moteur: moteur });
