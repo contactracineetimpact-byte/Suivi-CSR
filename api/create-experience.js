@@ -1,74 +1,40 @@
-// api/create-experience.js
+// api/get-experience.js
 //
-// NOUVEAU (25/08/2026) — Le client choisit lui-même ANCRAGE ou RUPTURE (guidé
-// en direct par Franck pendant la séance). Cette route crée l'expérience
-// correspondante et la lie au client, une seule fois.
+// NOUVEAU (25/08/2026) — Route de lecture seule. Étant donné le code d'un
+// client, renvoie le moteur (ANCRAGE/RUPTURE) et l'objectif de son expérience
+// active, pour que l'interface sache quel questionnaire afficher.
 //
-// MIS À JOUR (30/08/2026) — Modèle multi-cycle, Chantier 2 : une nouvelle
-// expérience peut désormais être créée alors qu'une expérience est déjà
-// liée, mais UNIQUEMENT si son statut est 'En pause', 'Consolidé' ou
-// 'Abandonné' (liste blanche stricte — tout le reste refuse, y compris un
-// statut absent/inconnu, par sécurité). L'ancienne expérience n'est JAMAIS
-// modifiée : ni son statut, ni ses champs, ni ses cycles liés — seul le
-// lien 'Expérience active' du client est remplacé, et seulement après
-// confirmation que la nouvelle expérience a bien été créée.
+// MIS À JOUR (30/08/2026) — Modèle multi-cycle, Chantier 3 : les réponses de
+// configuration (CSR_Configuration) sont désormais scopées au cycle courant
+// plutôt qu'à l'expérience entière. Avant ce correctif, une expérience à
+// plusieurs cycles aurait mélangé les réponses de tous ses cycles, et la
+// résolution du checkinContext (findByEtape, qui prend la PREMIÈRE
+// correspondance) aurait silencieusement continué à utiliser les réponses
+// du cycle 1 même après la création d'un cycle 2 avec une nouvelle
+// hypothèse. Compatibilité explicitement préservée pour les clients
+// mono-cycle existants dont les réponses n'ont jamais eu de lien 'Cycle'
+// (voir disambiguation ci-dessous) — non-régression garantie pour eux.
 //
-// MIS À JOUR (30/08/2026) — Modèle multi-cycle, Chantier 3 : ajout du
-// paramètre optionnel consoliderAncienne. Quand le client déclenche
-// explicitement "Changer d'expérience" depuis l'État D (cycle terminé et
-// déjà évalué), l'ancienne expérience peut encore être 'Test en cours' —
-// aucune décision de bilan autre que 'Suspendre' ne change son statut
-// automatiquement. Ce paramètre autorise donc un contournement CIBLÉ et
-// VÉRIFIÉ de la liste blanche : on ne l'accepte que si on confirme
-// soi-même, côté serveur, que le cycle le plus récent de l'ancienne
-// expérience est réellement évalué (Décision suivante renseignée) — jamais
-// sur la seule foi de ce que le client prétend. Si la vérification échoue,
-// refus normal. Si elle réussit : création + liaison comme d'habitude, puis
-// — et seulement après liaison confirmée réussie — l'ancienne expérience
-// passe à 'Consolidé'. Jamais l'inverse (consolider avant de savoir si la
-// création réussit), pour ne jamais clôturer une expérience pour rien si la
-// nouvelle création échoue.
-//
-// Corps attendu (POST) : { code, moteur, objectif, consoliderAncienne }
-// moteur doit être exactement "ANCRAGE" ou "RUPTURE".
-// consoliderAncienne : booléen optionnel, false par défaut.
-
-const STATUTS_PERMETTANT_NOUVELLE_EXPERIENCE = ['En pause', 'Consolidé', 'Abandonné'];
-
-function extractSelectName(field) {
-  if (!field) return null;
-  if (typeof field === 'string') return field;
-  if (typeof field === 'object' && field.name) return field.name;
-  return null;
-}
+// Appel : GET /api/get-experience?code=TEST-FRANCK
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
+  if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Méthode non autorisée' });
   }
 
   try {
-    const { code, moteur, objectif, consoliderAncienne } = req.body;
-
+    const { code } = req.query;
     if (!code || typeof code !== 'string') {
       return res.status(400).json({ error: 'Code manquant' });
-    }
-    if (moteur !== 'ANCRAGE' && moteur !== 'RUPTURE') {
-      return res.status(400).json({ error: 'Moteur invalide' });
     }
 
     const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN;
     const AIRTABLE_BASE = process.env.AIRTABLE_BASE || 'app9uUXCxNdjb0m9X';
     const TABLE_CLIENTS = 'SuiviCSR_Clients';
     const TABLE_EXPERIENCES = 'CSR_Expériences';
-    const TABLE_CYCLES = 'CSR_Cycles';
 
-    const headers = {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-      'Content-Type': 'application/json',
-    };
+    const headers = { Authorization: `Bearer ${AIRTABLE_TOKEN}` };
 
-    // 1. Retrouver le client.
     const filterFormula = encodeURIComponent(`{Code}='${code}'`);
     const clientUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CLIENTS}?filterByFormula=${filterFormula}&maxRecords=1`;
     const clientRes = await fetch(clientUrl, { headers });
@@ -78,178 +44,126 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'Client introuvable' });
     }
 
-    const clientRecord = clientData.records[0];
-
-    // 2. Si une expérience est déjà liée, son statut décide si une nouvelle
-    //    expérience peut être créée. Liste blanche stricte : seuls 'En
-    //    pause', 'Consolidé' et 'Abandonné' l'autorisent. 'Configuration',
-    //    'Test en cours', 'Changé de moteur', ou tout statut absent/non
-    //    reconnu refusent — jamais l'inverse (pas de liste noire), pour que
-    //    tout cas non prévu reste bloquant par défaut.
-    const existingLinks = clientRecord.fields['Expérience active'];
-    let existingExperienceId = null;
-    let doitConsoliderApresLiaison = false;
-
-    if (existingLinks && existingLinks.length > 0) {
-      existingExperienceId = existingLinks[0];
-      const existingExpUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}/${existingExperienceId}`;
-      const existingExpRes = await fetch(existingExpUrl, { headers });
-
-      if (!existingExpRes.ok) {
-        // Lecture du statut impossible : on ne suppose rien, on refuse.
-        return res.status(409).json({
-          error: "Impossible de créer une nouvelle expérience : le statut de l'expérience actuelle n'est pas reconnu.",
-        });
-      }
-
-      const existingExpData = await existingExpRes.json();
-      const existingStatut = extractSelectName(existingExpData.fields['Statut']);
-
-      if (!STATUTS_PERMETTANT_NOUVELLE_EXPERIENCE.includes(existingStatut)) {
-        // NOUVEAU (30/08/2026) — Contournement ciblé pour "Changer
-        // d'expérience" depuis l'État D : vérifié, jamais supposé.
-        let bypassAutorise = false;
-        if (consoliderAncienne === true) {
-          const cyclesUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}?pageSize=100`;
-          const cyclesRes = await fetch(cyclesUrl, { headers });
-          const cyclesData = await cyclesRes.json();
-          const matchingCycles = (cyclesData.records || []).filter(
-            (r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(existingExperienceId)
-          );
-          if (matchingCycles.length > 0) {
-            matchingCycles.sort((a, b) => (b.fields['N° cycle'] || 0) - (a.fields['N° cycle'] || 0));
-            const latestCycle = matchingCycles[0];
-            const decisionName = extractSelectName(latestCycle.fields['Décision suivante']);
-            if (!!decisionName) {
-              bypassAutorise = true;
-              doitConsoliderApresLiaison = true;
-            }
-          }
-        }
-
-        if (!bypassAutorise) {
-          if (existingStatut === 'Configuration' || existingStatut === 'Test en cours') {
-            return res.status(409).json({
-              error: "Une expérience est déjà active pour ce client. Termine ou mets en pause l'expérience actuelle avant d'en créer une nouvelle.",
-            });
-          }
-          if (existingStatut === 'Changé de moteur') {
-            return res.status(409).json({
-              error: 'Cette expérience ne permet pas encore de créer une nouvelle expérience depuis cet état.',
-            });
-          }
-          // Statut absent, vide, ou toute valeur non reconnue.
-          return res.status(409).json({
-            error: "Impossible de créer une nouvelle expérience : le statut de l'expérience actuelle n'est pas reconnu.",
-          });
-        }
-        // bypassAutorise === true : le cycle le plus récent de l'ancienne
-        // expérience est confirmé évalué — on poursuit, l'ancienne sera
-        // consolidée après liaison réussie (jamais avant).
-      }
-      // Statut autorisé (whitelist normale, ou bypass vérifié ci-dessus) :
-      // on poursuit. L'ancienne expérience n'est touchée nulle part dans ce
-      // qui suit avant l'étape 5 — ni son statut, ni ses champs, ni ses
-      // cycles.
+    const experienceLinks = clientData.records[0].fields['Expérience active'];
+    if (!experienceLinks || experienceLinks.length === 0) {
+      return res.status(200).json({ hasExperience: false });
     }
 
-    const prenom = clientRecord.fields['Prenom'] || clientRecord.fields['Prénom'] || code;
+    const experienceRecordId = experienceLinks[0];
+    const expUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}/${experienceRecordId}`;
+    const expRes = await fetch(expUrl, { headers });
+    const expData = await expRes.json();
 
-    // 3. Créer la nouvelle expérience.
-    const createExpRes = await fetch(
-      `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}`,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          fields: {
-            'Nom expérience': prenom + ' — ' + moteur,
-            Moteur: moteur,
-            'Version protocole': moteur + '_v1',
-            Objectif: objectif || '',
-            Statut: 'Configuration',
-            'Date création': new Date().toISOString().slice(0, 10),
-          },
-        }),
-      }
-    );
-
-    if (!createExpRes.ok) {
-      // La création a échoué : on ne touche à rien côté client, l'ancien
-      // lien (s'il existait) reste exactement tel quel.
-      const errText = await createExpRes.text();
-      console.error('Échec création CSR_Expériences:', errText);
-      throw new Error('Échec création expérience');
+    if (!expRes.ok) {
+      return res.status(200).json({ hasExperience: false });
     }
 
-    const createExpData = await createExpRes.json();
-    const experienceRecordId = createExpData.id;
+    const moteurField = expData.fields['Moteur'];
+    const moteur = typeof moteurField === 'string' ? moteurField : moteurField && moteurField.name;
+    const statutField = expData.fields['Statut'];
+    const statut = typeof statutField === 'string' ? statutField : statutField && statutField.name;
 
-    // 4. Lier la nouvelle expérience au client — remplace l'ancien lien
-    //    (s'il y en avait un) par la nouvelle, en un seul PATCH. On
-    //    n'exécute cette étape qu'après confirmation que la création
-    //    ci-dessus a bien réussi.
-    const updateClientRes = await fetch(
-      `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CLIENTS}/${clientRecord.id}`,
-      {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({
-          fields: { 'Expérience active': [experienceRecordId] },
-        }),
-      }
-    );
+    // Verrouillage décidé côté serveur : tant que le statut est "En triage" ou
+    // "Configuration", le plan n'est pas encore généré, le client répond au
+    // questionnaire. Dès que le statut avance (typiquement "Test en cours"
+    // une fois le premier cycle créé), l'expérience est verrouillée — on
+    // renvoie alors les réponses déjà enregistrées pour affichage en lecture
+    // seule, sans jamais dépendre du navigateur du client pour cette décision.
+    const isLocked = !!statut && statut !== 'En triage' && statut !== 'Configuration';
 
-    if (!updateClientRes.ok) {
-      // La nouvelle expérience existe bel et bien (elle a été créée avec
-      // succès à l'étape 3), mais la liaison au client a échoué. On ne
-      // prétend jamais que tout a réussi dans ce cas — on expose l'ID de
-      // l'expérience orpheline pour que le problème reste traçable plutôt
-      // que silencieux. L'ancienne expérience n'est PAS consolidée dans ce
-      // cas — la liaison n'ayant pas réussi, rien ne doit être clôturé.
-      const errText = await updateClientRes.text();
-      console.error('Échec liaison client -> expérience:', errText);
-      return res.status(207).json({
-        success: false,
-        experienceCreee: true,
-        experienceId: experienceRecordId,
-        liaisonClientReussie: false,
-        error: "L'expérience a été créée mais n'a pas pu être liée au client. Intervention manuelle nécessaire.",
-      });
-    }
-
-    // 5. Consolidation de l'ancienne expérience — uniquement si demandée ET
-    //    vérifiée à l'étape 2, ET seulement maintenant que la création ET la
-    //    liaison ont toutes deux réussi. Un échec ici est signalé
-    //    explicitement plutôt qu'avalé : la nouvelle expérience est bel et
-    //    bien active pour le client, mais l'ancienne resterait alors dans un
-    //    statut non consolidé jusqu'à correction manuelle.
-    let ancienneConsolideeAvecSucces = null;
-    if (doitConsoliderApresLiaison && existingExperienceId) {
-      const consolideRes = await fetch(
-        `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}/${existingExperienceId}`,
-        {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify({ fields: { Statut: 'Consolidé' } }),
-        }
+    let planAnswers = null;
+    let checkinContext = null;
+    let currentCycleId = null;
+    if (isLocked) {
+      // Détermine le cycle courant (le plus récent) pour pouvoir y scoper
+      // les réponses de configuration — même logique de tri que
+      // get-cycle-summary.js et save-cycle.js, pour une seule définition
+      // cohérente de "cycle le plus récent" dans toute l'application.
+      const TABLE_CYCLES = 'CSR_Cycles';
+      const cyclesUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}?pageSize=100`;
+      const cyclesRes = await fetch(cyclesUrl, { headers });
+      const cyclesData = await cyclesRes.json();
+      const matchingCycles = (cyclesData.records || []).filter(
+        (r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(experienceRecordId)
       );
-      ancienneConsolideeAvecSucces = consolideRes.ok;
-      if (!consolideRes.ok) {
-        const errText = await consolideRes.text();
-        console.error('Échec consolidation ancienne expérience:', errText);
+      if (matchingCycles.length > 0) {
+        matchingCycles.sort((a, b) => (b.fields['N° cycle'] || 0) - (a.fields['N° cycle'] || 0));
+        currentCycleId = matchingCycles[0].id;
+      }
+
+      const TABLE_CONFIG = 'CSR_Configuration';
+      const configUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CONFIG}?pageSize=100`;
+      const configRes = await fetch(configUrl, { headers });
+      const configData = await configRes.json();
+      if (configData.records) {
+        const allAnswersForExperience = configData.records.filter(
+          (r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(experienceRecordId)
+        );
+
+        // Disambiguation : si AU MOINS UNE réponse de cette expérience porte
+        // déjà un lien 'Cycle', on suppose que la migration vers le modèle
+        // multi-cycle est en cours pour cette expérience, et on scope
+        // strictement au cycle courant (currentCycleId) — sinon les
+        // anciennes réponses non liées d'un cycle 1 historique pourraient
+        // se mélanger à celles d'un cycle 2 fraîchement créé.
+        // Si AUCUNE réponse n'a jamais de lien 'Cycle' (expérience restée
+        // entièrement legacy, mono-cycle), on garde le comportement
+        // d'origine — toutes les réponses de l'expérience — pour ne jamais
+        // régresser sur les clients existants.
+        const hasAnyCycleLinkedAnswer = allAnswersForExperience.some(
+          (r) => Array.isArray(r.fields['Cycle']) && r.fields['Cycle'].length > 0
+        );
+
+        let ownAnswers;
+        if (hasAnyCycleLinkedAnswer && currentCycleId) {
+          ownAnswers = allAnswersForExperience.filter(
+            (r) => Array.isArray(r.fields['Cycle']) && r.fields['Cycle'].includes(currentCycleId)
+          );
+        } else {
+          ownAnswers = allAnswersForExperience;
+        }
+
+        planAnswers = ownAnswers.map((r) => ({ etape: r.fields['Étape'], reponse: r.fields['Réponse'] }));
+
+        // NOUVEAU (26/08/2026) — Résout le contexte personnalisé du check-in
+        // quotidien à partir des réponses réelles du client, pour que
+        // l'interface n'ait jamais à deviner le mapping elle-même.
+        const findByEtape = (predicate) => {
+          const match = ownAnswers.find((r) => predicate(r.fields['Étape'] || ''));
+          return match ? match.fields['Réponse'] : null;
+        };
+
+        if (moteur === 'ANCRAGE') {
+          checkinContext = {
+            signal: findByEtape((e) => e.startsWith('C —') || e.startsWith('C -')),
+            action: findByEtape((e) => e.includes('Agir')),
+            preuve: findByEtape((e) => e.includes('Garder la preuve')),
+          };
+        } else if (moteur === 'RUPTURE') {
+          checkinContext = {
+            signal: findByEtape((e) => e.includes('Percevoir le signal') && e.includes('émotion')),
+            ancienComportement: findByEtape((e) => e.includes('Percevoir le signal') && e.includes('automatisme')),
+            alternative: findByEtape((e) => e.includes('Transformer la réponse')),
+            preuve: findByEtape((e) => e.includes('Relever la preuve')),
+          };
+        }
       }
     }
 
     return res.status(200).json({
-      success: true,
+      hasExperience: true,
       experienceId: experienceRecordId,
-      moteur: moteur,
-      ancienneExperienceId: existingExperienceId,
-      ancienneConsolideeAvecSucces: ancienneConsolideeAvecSucces,
+      moteur: moteur || null,
+      objectif: expData.fields['Objectif'] || null,
+      nomExperience: expData.fields['Nom expérience'] || null,
+      statut: statut || null,
+      locked: isLocked,
+      currentCycleId: currentCycleId,
+      planAnswers: planAnswers,
+      checkinContext: checkinContext,
     });
   } catch (err) {
-    console.error('Erreur create-experience:', err);
+    console.error('Erreur get-experience:', err);
     return res.status(500).json({ error: 'Erreur serveur' });
   }
 }
