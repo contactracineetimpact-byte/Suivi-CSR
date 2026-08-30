@@ -1883,6 +1883,13 @@ function confirmMoteurChoice() {
       document.getElementById('quest-loading').style.display = 'none';
       document.getElementById('quest-error').style.display = 'none';
       renderQuestionnaire(pendingMoteur);
+      // NOUVEAU (30/08/2026) — Chantier 10 : garde-fou. renderCyclePrepForm()
+      // (reprise) réassigne dynamiquement onclick sur ce même bouton ; ce
+      // chemin de création initiale doit explicitement le remettre sur
+      // submitQuestionnaire() au cas où une reprise aurait eu lieu plus tôt
+      // dans la même session. renderQuestionnaire() elle-même reste
+      // inchangée — ce reset vit uniquement ici, à son unique point d'entrée.
+      document.getElementById('btn-submit-quest').onclick = submitQuestionnaire;
       document.getElementById('quest-form').style.display = 'block';
     })
     .catch(function(e) {
@@ -1924,6 +1931,10 @@ function renderQuestionnaire(moteur) {
 // questionnaire que d'habitude, mais en mode "nouveau cycle" : la
 // soumission passera par save-cycle SANS cycleId (création, numérotation
 // serveur) plutôt que par create-experience.
+// MIS À JOUR (30/08/2026) — Chantier 10 : récupère aussi get-experience
+// (objectif + checkinContext) pour hériter Objectif et Signal, en plus du
+// contexte du cycle précédent déjà affiché. Un appel de plus, réutilisant
+// une route déjà existante — aucune nouvelle API.
 function openCyclePrep() {
   showScreen('s-questionnaire');
   document.getElementById('quest-loading').style.display = 'block';
@@ -1931,9 +1942,13 @@ function openCyclePrep() {
   document.getElementById('quest-cycle-context').style.display = 'none';
   document.getElementById('quest-form').style.display = 'none';
 
-  fetch('/api/get-cycle-summary?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
+  Promise.all([
+    fetch('/api/get-cycle-summary?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' }).then(function(r) { return r.json(); }),
+    fetch('/api/get-experience?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' }).then(function(r) { return r.json(); }),
+  ])
+    .then(function(results) {
+      var data = results[0];
+      var expData = results[1];
       document.getElementById('quest-loading').style.display = 'none';
 
       if (!data.hasCycle) {
@@ -1964,7 +1979,7 @@ function openCyclePrep() {
       }
       document.getElementById('quest-cycle-context').style.display = 'block';
 
-      renderQuestionnaire(data.moteur);
+      renderCyclePrepForm(data.moteur, expData.objectif || null, expData.checkinContext || null);
       document.getElementById('quest-form').style.display = 'block';
     })
     .catch(function(e) {
@@ -1988,6 +2003,249 @@ function openChangeExperienceFlow() {
   document.getElementById('moteur-cards').style.display = 'block';
   document.getElementById('moteur-confirm').style.display = 'none';
   showScreen('s-moteur-choice');
+}
+
+// ═══════════════════════════════════════════════════════════
+// NOUVEAU (30/08/2026) — Chantier 10 : formulaire de reprise réduit.
+// Fonctions entièrement séparées de renderQuestionnaire()/
+// submitQuestionnaire() (créées au Chantier 3, utilisées uniquement pour
+// le tout premier cycle d'une expérience) — aucune des deux n'est
+// modifiée, aucun risque de régression sur ce chemin déjà validé.
+//
+// Principe : Objectif hérité en lecture seule (jamais réécrit — aucune
+// fonction quotidienne n'en dépend par cycle). Signal(s) hérité(s), avec
+// un bouton "Modifier" explicite ; TOUJOURS réécrit en base pour le
+// nouveau cycle (même texte si non modifié) — nécessaire pour que
+// get-experience.js puisse reconstruire checkinContext pour CE cycle
+// précis (scoping strict par cycle, Chantier 3). Le libellé "Hérité du
+// cycle précédent" reste visible à l'écran en permanence : le client ne
+// voit jamais cette valeur comme une réponse fraîchement saisie.
+// ═══════════════════════════════════════════════════════════
+var cyclePrepSignalValues = {}; // { etapeId: texte hérité actuel }
+var cyclePrepSignalModified = {}; // { etapeId: bool }
+
+function renderCyclePrepForm(moteur, objectif, checkinContext) {
+  document.getElementById('quest-title').textContent = moteur === 'ANCRAGE' ? 'Préparer le cycle suivant — ANCRAGE' : 'Préparer le cycle suivant — RUPTURE';
+  document.getElementById('quest-sub').textContent = "Ce qui est déjà su reste acquis. Définis seulement ce qui change.";
+
+  cyclePrepSignalValues = {};
+  cyclePrepSignalModified = {};
+
+  var html = '';
+
+  if (objectif) {
+    html += '<div class="score-block">'
+      + '<div class="score-block-name" style="margin-bottom:4px">Objectif</div>'
+      + '<div style="font-size:11px;color:rgba(245,240,232,.5);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Hérité du cycle précédent</div>'
+      + '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(objectif) + '</div>'
+      + '</div>';
+  }
+
+  // Bloc(s) Signal — un pour ANCRAGE, deux pour RUPTURE (émotion + ancien
+  // automatisme). Chacun affiche le texte hérité, avec un bouton
+  // "Modifier" qui révèle une zone de saisie pré-remplie.
+  function signalBlock(etapeId, titre, question, valeurHeritee) {
+    cyclePrepSignalValues[etapeId] = valeurHeritee || '';
+    cyclePrepSignalModified[etapeId] = false;
+    return '<div class="score-block">'
+      + '<div class="score-block-name" style="margin-bottom:4px">' + escapeHtml(titre) + '</div>'
+      + '<div style="font-size:11px;color:rgba(245,240,232,.5);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Hérité du cycle précédent</div>'
+      + '<div id="cp-signal-display-' + etapeId + '" style="font-size:14px;color:var(--creme);line-height:1.5;margin-bottom:8px">' + escapeHtml(valeurHeritee || '—') + '</div>'
+      + '<button type="button" class="btn-ghost" id="cp-signal-btn-' + etapeId + '" onclick="cpToggleSignalEdit(\'' + etapeId + '\')" style="font-size:11px;padding:7px 12px">Modifier</button>'
+      + '<div id="cp-signal-edit-' + etapeId + '" style="display:none;margin-top:10px">'
+      + '<div class="score-question" style="font-style:normal;margin-bottom:8px">' + escapeHtml(question) + '</div>'
+      + '<textarea class="just-input" id="cp-signal-input-' + etapeId + '">' + escapeHtml(valeurHeritee || '') + '</textarea>'
+      + '</div>'
+      + '</div>';
+  }
+
+  if (moteur === 'ANCRAGE') {
+    html += signalBlock('C1', 'Signal', "Quelle émotion, sensation ou tension intérieure apparaît juste avant que tu aies tendance à rester dans ton ancien fonctionnement ?", checkinContext && checkinContext.signal);
+
+    html += '<div class="score-block">'
+      + '<div class="score-block-name">Ce que je teste maintenant</div>'
+      + '<div class="score-question">Quelle est la plus petite action qui constitue un vrai progrès — et comment vas-tu constater, chaque jour, que tu l\'as fait ?</div>'
+      + '<textarea class="just-input" id="cp-action-preuve" placeholder="Ta réponse..."></textarea>'
+      + '<div class="field-err" id="cp-action-preuve-err">Ce champ est obligatoire.</div>'
+      + '</div>';
+
+    html += '<div class="score-block">'
+      + '<div class="score-block-name">Résistance</div>'
+      + '<div class="score-question">Cette fois, qu\'est-ce qui pourrait te bloquer ?</div>'
+      + '<textarea class="just-input" id="cp-resistance" placeholder="Ta réponse..."></textarea>'
+      + '<div class="field-err" id="cp-resistance-err">Ce champ est obligatoire.</div>'
+      + '</div>';
+  } else if (moteur === 'RUPTURE') {
+    html += signalBlock('P1', 'Signal — émotion', "Quelle émotion, sensation ou tension intérieure annonce que l'habitude est sur le point de commencer ?", checkinContext && checkinContext.signal);
+    html += signalBlock('P2', 'Signal — ancien automatisme', "Concrètement, qu'est-ce que tu fais dans ce cas précis — le comportement exact que tu veux interrompre ?", checkinContext && checkinContext.ancienComportement);
+
+    html += '<div class="score-block">'
+      + '<div class="score-block-name">Ce que je teste maintenant</div>'
+      + '<div class="just-label" style="margin-bottom:6px">Nouvelle réponse à tester</div>'
+      + '<div class="score-question" style="margin-bottom:8px">Si ce signal apparaît, quelle réponse veux-tu avoir à la place ?</div>'
+      + '<textarea class="just-input" id="cp-transformer" placeholder="Ta réponse..."></textarea>'
+      + '<div class="field-err" id="cp-transformer-err">Ce champ est obligatoire.</div>'
+      + '<div class="just-label" style="margin:14px 0 6px">Petite action pour commencer</div>'
+      + '<div class="score-question" style="margin-bottom:8px">Quelle est la plus petite action qui te permet d\'interrompre le cycle ?</div>'
+      + '<textarea class="just-input" id="cp-utiliser" placeholder="Ta réponse..."></textarea>'
+      + '<div class="field-err" id="cp-utiliser-err">Ce champ est obligatoire.</div>'
+      + '</div>';
+
+    html += '<div class="score-block">'
+      + '<div class="score-block-name">Frein</div>'
+      + '<div class="score-question">Cette fois, qu\'est-ce qui pourrait te faire revenir à l\'ancienne habitude ?</div>'
+      + '<textarea class="just-input" id="cp-frein" placeholder="Ta réponse..."></textarea>'
+      + '<div class="field-err" id="cp-frein-err">Ce champ est obligatoire.</div>'
+      + '</div>';
+
+    html += '<div class="score-block">'
+      + '<div class="score-block-name">Preuve</div>'
+      + '<div class="score-question">Comment vas-tu noter, chaque jour, si tu as intercepté ou non ?</div>'
+      + '<textarea class="just-input" id="cp-preuve" placeholder="Ta réponse..."></textarea>'
+      + '<div class="field-err" id="cp-preuve-err">Ce champ est obligatoire.</div>'
+      + '</div>';
+  }
+
+  document.getElementById('quest-blocks').innerHTML = html;
+
+  var btn = document.getElementById('btn-submit-quest');
+  btn.textContent = 'Générer mon plan';
+  btn.onclick = submitCyclePrep;
+}
+
+function cpToggleSignalEdit(etapeId) {
+  var editEl = document.getElementById('cp-signal-edit-' + etapeId);
+  var displayEl = document.getElementById('cp-signal-display-' + etapeId);
+  var btnEl = document.getElementById('cp-signal-btn-' + etapeId);
+  var opening = editEl.style.display === 'none';
+  editEl.style.display = opening ? 'block' : 'none';
+  displayEl.style.display = opening ? 'none' : 'block';
+  btnEl.textContent = opening ? 'Annuler' : 'Modifier';
+}
+
+function submitCyclePrep() {
+  var moteur = currentMoteur;
+  var ok = true;
+
+  function validateField(id, errId) {
+    var el = document.getElementById(id);
+    var errEl = document.getElementById(errId);
+    var val = el.value.trim();
+    if (!val || val.length < 3) {
+      el.classList.add('error'); errEl.style.display = 'block'; ok = false;
+      return null;
+    }
+    el.classList.remove('error'); errEl.style.display = 'none';
+    return val;
+  }
+
+  // Résout la valeur finale de chaque signal hérité : celle saisie dans la
+  // zone d'édition si "Modifier" a été utilisé, sinon la valeur héritée
+  // telle quelle — jamais laissée vide.
+  function resolveSignal(etapeId) {
+    var editEl = document.getElementById('cp-signal-edit-' + etapeId);
+    var opened = editEl && editEl.style.display !== 'none';
+    if (opened) {
+      var inputEl = document.getElementById('cp-signal-input-' + etapeId);
+      var val = inputEl.value.trim();
+      return val || cyclePrepSignalValues[etapeId];
+    }
+    return cyclePrepSignalValues[etapeId];
+  }
+
+  var answers = []; // [{ etape, question, reponse }]
+
+  if (moteur === 'ANCRAGE') {
+    answers.push({
+      etape: 'C — Connecter (signal émotionnel)',
+      question: "Quelle émotion, sensation ou tension intérieure apparaît juste avant que tu aies tendance à rester dans ton ancien fonctionnement ?",
+      reponse: resolveSignal('C1'),
+    });
+    var actionPreuve = validateField('cp-action-preuve', 'cp-action-preuve-err');
+    var resistance = validateField('cp-resistance', 'cp-resistance-err');
+    if (!ok) {
+      document.querySelector('#quest-blocks .just-input.error').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    // Un seul texte saisi, réparti sur les deux étapes dont dépend le
+    // point du jour (Agir = action, Garder la preuve = preuve) — la
+    // fusion demandée se traduit ici par une réponse identique aux deux
+    // questions, pour ne rien casser côté checkinContext.
+    answers.push({ etape: 'A — Agir', question: "Quelle est la plus petite action qui constitue un vrai progrès ?", reponse: actionPreuve });
+    answers.push({ etape: 'G — Garder la preuve', question: "Comment vas-tu constater, chaque jour, que tu l'as fait ?", reponse: actionPreuve });
+    answers.push({ etape: 'N — Neutraliser les résistances', question: "Qu'est-ce qui pourrait rendre l'action difficile, et que peux-tu préparer à l'avance ?", reponse: resistance });
+  } else if (moteur === 'RUPTURE') {
+    answers.push({
+      etape: 'P — Percevoir le signal (émotion)',
+      question: "Quelle émotion, sensation ou tension intérieure annonce que l'habitude est sur le point de commencer ?",
+      reponse: resolveSignal('P1'),
+    });
+    answers.push({
+      etape: 'P — Percevoir le signal (ancien automatisme)',
+      question: "Concrètement, qu'est-ce que tu fais dans ce cas précis — le comportement exact que tu veux interrompre ?",
+      reponse: resolveSignal('P2'),
+    });
+    var transformer = validateField('cp-transformer', 'cp-transformer-err');
+    var utiliser = validateField('cp-utiliser', 'cp-utiliser-err');
+    var frein = validateField('cp-frein', 'cp-frein-err');
+    var preuve = validateField('cp-preuve', 'cp-preuve-err');
+    if (!ok) {
+      document.querySelector('#quest-blocks .just-input.error').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    answers.push({ etape: 'T — Transformer la réponse (avec charge équivalente)', question: "Si ce signal apparaît, quelle réponse veux-tu avoir à la place ?", reponse: transformer });
+    answers.push({ etape: "U — Utiliser l'alternative", question: "Quelle est la plus petite action qui te permet d'interrompre le cycle ?", reponse: utiliser });
+    answers.push({ etape: 'U — Un frein', question: "Qu'est-ce qui rend cette habitude trop facile aujourd'hui, et quel obstacle peux-tu ajouter ?", reponse: frein });
+    answers.push({ etape: 'R — Relever la preuve', question: "Comment vas-tu noter, chaque jour, si tu as intercepté ou non ?", reponse: preuve });
+  }
+
+  var btn = document.getElementById('btn-submit-quest');
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement...';
+
+  // Même ordre d'écriture que submitQuestionnaire() (Chantier 3) : le
+  // cycle est créé D'ABORD, sans cycleId ni nomCycle/numeroCycle (le
+  // serveur calcule tout), puis chaque réponse est enregistrée avec le
+  // cycleId obtenu. save-cycle.js et save-configuration.js ne sont pas
+  // modifiés — mêmes routes, même contrat, réutilisées telles quelles.
+  var dateDebut = new Date().toISOString().slice(0, 10);
+  var dateFinObj = new Date();
+  dateFinObj.setDate(dateFinObj.getDate() + 5);
+  var dateFin = dateFinObj.toISOString().slice(0, 10);
+
+  fetch('/api/save-cycle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: code, dateDebut: dateDebut, dateFin: dateFin, actionsPrevues: answers.map(function(a) { return a.etape + ' : ' + a.reponse; }).join('\n\n') }),
+  })
+    .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+    .then(function(result) {
+      if (!result.ok || !result.data.cycleId) {
+        throw new Error(result.data && result.data.error ? result.data.error : 'Échec création du cycle');
+      }
+      var newCycleId = result.data.cycleId;
+      var savePromises = answers.map(function(a) {
+        return fetch('/api/save-configuration', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: code, etape: a.etape, question: a.question, reponse: a.reponse, cycleId: newCycleId }),
+        });
+      });
+      return Promise.all(savePromises).then(function() { return answers; });
+    })
+    .then(function(answers) {
+      preparingNextCycle = false;
+      renderPlan(answers);
+      showScreen('s-plan');
+      btn.disabled = false;
+      btn.textContent = 'Générer mon plan';
+    })
+    .catch(function(e) {
+      console.error('Erreur enregistrement reprise de cycle :', e);
+      btn.disabled = false;
+      btn.textContent = 'Générer mon plan';
+      alert("Une erreur est survenue pendant l'enregistrement. Réessaie, ou préviens Franck si ça persiste.");
+    });
 }
 
 function submitQuestionnaire() {
