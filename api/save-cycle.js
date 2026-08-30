@@ -10,12 +10,29 @@
 // déjà l'ID exact du cycle via get-cycle-summary — plus fiable que la
 // recherche par nom pour une mise à jour de fin de cycle).
 //
+// MIS À JOUR (30/08/2026) — Modèle multi-cycle, Chantier 1/3 :
+//   - N° cycle et Nom du cycle sont désormais calculés côté serveur à la
+//     création (jamais fournis par le client, même si envoyés — ignorés).
+//     La recherche par nom exact a été retirée : elle pouvait faire
+//     correspondre par erreur un nouveau cycle à un ancien du même nom et
+//     écraser ses données. Sans cette recherche, la création ne peut plus
+//     jamais cibler un enregistrement existant par accident.
+//   - Le verrouillage de l'expérience (Configuration -> Active) ne se
+//     déclenche désormais que si c'était réellement le tout premier cycle
+//     de cette expérience (compteur de cycles existants à zéro avant cette
+//     création) — pas simplement "aucun cycleId fourni", qui serait vrai
+//     pour chaque nouveau cycle, pas seulement le premier.
+//   - Une soumission de bilan dont decisionSuivante === 'Suspendre' fait
+//     passer l'expérience liée au statut 'En pause' (jamais 'Abandonné').
+//
 // Corps attendu (POST), tous les champs de mesure sont optionnels :
-//   { code, cycleId?, nomCycle, numeroCycle, dateDebut, dateFin,
+//   { code, cycleId?, dateDebut, dateFin,
 //     actionsPrevues, facilite, identite, alignement, resultatObserve,
 //     decisionSuivante, realiteObservee, resultat,
 //     facteurFaciliteDifficulte, comportementIdentitaireObserve,
 //     justificationAlignement, apprentissage }
+// nomCycle/numeroCycle ne sont plus lus depuis le corps de la requête : ils
+// sont toujours calculés par le serveur à la création.
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -26,8 +43,6 @@ export default async function handler(req, res) {
     const {
       code,
       cycleId,
-      nomCycle,
-      numeroCycle,
       dateDebut,
       dateFin,
       actionsPrevues,
@@ -79,10 +94,9 @@ export default async function handler(req, res) {
 
     // 2. Cible du cycle : si cycleId est fourni explicitement (cas du bilan
     //    de fin de cycle, qui connaît déjà l'ID exact), on l'utilise
-    //    directement — plus fiable qu'une recherche par nom. On vérifie
-    //    quand même que ce cycle appartient bien à l'expérience active du
-    //    client, pour ne jamais laisser une requête modifier le cycle d'un
-    //    autre client par erreur ou par ID deviné.
+    //    directement. On vérifie quand même que ce cycle appartient bien à
+    //    l'expérience active du client, pour ne jamais laisser une requête
+    //    modifier le cycle d'un autre client par erreur ou par ID deviné.
     let existingCycleId = null;
 
     if (cycleId) {
@@ -97,28 +111,42 @@ export default async function handler(req, res) {
           return res.status(403).json({ error: "Ce cycle n'appartient pas à l'expérience active de ce client." });
         }
       }
-    } else if (nomCycle) {
-      // Recherche par nom uniquement quand aucun cycleId n'est fourni
-      // (cas de la création initiale du cycle depuis le questionnaire).
-      const cycleFilter = encodeURIComponent(`{Nom du cycle}='${nomCycle}'`);
-      const searchCycleUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}?filterByFormula=${cycleFilter}&returnFieldsByFieldId=false`;
-      const searchCycleRes = await fetch(searchCycleUrl, { headers });
-      const searchCycleData = await searchCycleRes.json();
-      if (searchCycleData.records && searchCycleData.records.length > 0) {
-        const match = searchCycleData.records.find((r) => {
-          const links = r.fields['Expérience'];
-          return Array.isArray(links) && links.includes(experienceRecordId);
-        });
-        if (match) existingCycleId = match.id;
-      }
     }
 
-    // Ne pousser dans le payload que les champs réellement fournis, pour ne
-    // jamais écraser une valeur déjà enregistrée avec un champ vide non
-    // renseigné dans cet appel précis.
+    // 2bis. Si aucun cycleId n'est fourni, c'est une création : on calcule
+    //    N° cycle / Nom du cycle côté serveur, jamais depuis le corps de la
+    //    requête. On récupère pour cela tous les cycles déjà liés à cette
+    //    expérience — le compteur obtenu ici sert aussi, plus bas, à savoir
+    //    si c'est réellement le premier cycle de l'expérience (et donc s'il
+    //    faut déclencher le verrouillage Configuration -> Active).
+    let numeroCycleCalcule = null;
+    let nomCycleCalcule = null;
+    let isFirstCycleOfExperience = false;
+
+    if (!existingCycleId) {
+      const existingCyclesUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}?pageSize=100`;
+      const existingCyclesRes = await fetch(existingCyclesUrl, { headers });
+      const existingCyclesData = await existingCyclesRes.json();
+      const cyclesDeCetteExperience = (existingCyclesData.records || []).filter(
+        (r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(experienceRecordId)
+      );
+      const maxNumero = cyclesDeCetteExperience.reduce(
+        (max, r) => Math.max(max, r.fields['N° cycle'] || 0),
+        0
+      );
+      numeroCycleCalcule = maxNumero + 1;
+      nomCycleCalcule = 'Cycle ' + numeroCycleCalcule;
+      isFirstCycleOfExperience = cyclesDeCetteExperience.length === 0;
+    }
+
+    // Ne pousser dans le payload que les champs réellement fournis (ou
+    // calculés), pour ne jamais écraser une valeur déjà enregistrée avec un
+    // champ vide non renseigné dans cet appel précis.
     const fields = {};
-    if (nomCycle !== undefined) fields['Nom du cycle'] = nomCycle;
-    if (numeroCycle !== undefined) fields['N° cycle'] = numeroCycle;
+    if (!existingCycleId) {
+      fields['Nom du cycle'] = nomCycleCalcule;
+      fields['N° cycle'] = numeroCycleCalcule;
+    }
     if (dateDebut !== undefined) fields['Date début'] = dateDebut;
     if (dateFin !== undefined) fields['Date fin'] = dateFin;
     if (actionsPrevues !== undefined) fields['Actions prévues'] = actionsPrevues;
@@ -160,12 +188,16 @@ export default async function handler(req, res) {
 
     const opData = await opRes.json();
 
-    // Verrouillage côté serveur : la CRÉATION du premier cycle (pas sa mise à
-    // jour ultérieure) fait passer l'expérience de "Configuration" à "Test en
-    // cours" — c'est ce statut, lu par get-experience, qui décide si le
-    // client revoit le questionnaire ou son plan verrouillé.
-    if (!existingCycleId) {
-      const TABLE_EXPERIENCES = 'CSR_Expériences';
+    const TABLE_EXPERIENCES = 'CSR_Expériences';
+
+    // Verrouillage côté serveur : la CRÉATION du tout premier cycle de
+    // l'expérience (pas la création d'un cycle 2, 3... et pas une mise à
+    // jour) fait passer l'expérience de "Configuration" à "Test en cours"
+    // — c'est ce statut, lu par get-experience, qui décide si le client
+    // revoit le questionnaire ou son plan verrouillé. isFirstCycleOfExperience
+    // garantit que ce PATCH ne se déclenche qu'une seule fois par expérience,
+    // jamais pour les cycles suivants.
+    if (!existingCycleId && isFirstCycleOfExperience) {
       await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}/${experienceRecordId}`, {
         method: 'PATCH',
         headers,
@@ -173,7 +205,26 @@ export default async function handler(req, res) {
       }).catch((e) => console.error('Échec verrouillage statut expérience:', e));
     }
 
-    return res.status(200).json({ success: true, updated: !!existingCycleId, cycleId: existingCycleId || opData.id });
+    // NOUVEAU (30/08/2026) — Une soumission de bilan (mise à jour d'un
+    // cycle existant via cycleId) dont la décision est "Suspendre" met
+    // l'expérience liée en pause. C'est la SEULE des six décisions qui
+    // déclenche un changement de statut automatique — toutes les autres
+    // n'ont aucun effet ici, conformément au modèle validé.
+    if (existingCycleId && decisionSuivante === 'Suspendre') {
+      await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}/${experienceRecordId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ fields: { Statut: 'En pause' } }),
+      }).catch((e) => console.error('Échec passage en pause de l\'expérience:', e));
+    }
+
+    return res.status(200).json({
+      success: true,
+      updated: !!existingCycleId,
+      cycleId: existingCycleId || opData.id,
+      numeroCycle: numeroCycleCalcule,
+      nomCycle: nomCycleCalcule,
+    });
   } catch (err) {
     console.error('Erreur save-cycle:', err);
     return res.status(500).json({ error: 'Erreur serveur' });
