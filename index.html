@@ -2649,6 +2649,35 @@ function renderContextualBanner() {
           // à définir avec Franck.
           if (cycleData && cycleData.hasCycle && cycleData.alreadyEvaluated) {
             var decision = (cycleData.bilan && cycleData.bilan.decisionSuivante) || null;
+
+            // NOUVEAU (30/08/2026) — État "En pause" : sous-cas plus
+            // spécifique du même déclencheur (cycle évalué), vérifié en
+            // premier. expData.statut est déjà disponible dans cette
+            // fermeture (renvoyé par get-experience depuis le Chantier 3),
+            // aucune requête supplémentaire. Réutilise exactement les mêmes
+            // actions que l'État D générique (openCyclePrep /
+            // openChangeExperienceFlow) — seul le texte change, pour ne
+            // jamais laisser croire qu'une expérience en pause est
+            // simplement "terminée".
+            if (expData.statut === 'En pause') {
+              el.innerHTML =
+                '<div class="action-card">'
+                + '<div class="action-eyebrow">Expérience en pause</div>'
+                + '<div class="action-question" style="font-size:19px">' + escapeHtml(expData.nomExperience || expData.objectif || 'Cette expérience') + '</div>'
+                + '<div style="font-size:14px;color:rgba(245,240,232,.7);line-height:1.6;margin-top:6px">Cette expérience est actuellement en pause.</div>'
+                + (decision
+                    ? '<div style="font-size:13px;color:rgba(245,240,232,.55);margin-top:6px">Décision retenue au dernier cycle : <b style="color:var(--creme)">' + escapeHtml(decision) + '</b></div>'
+                    : '')
+                + '<div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">'
+                + '<button class="btn-engage" style="margin-top:0;flex:1;min-width:200px" onclick="openCyclePrep()">Reprendre cette expérience →</button>'
+                + '<button class="btn-ghost" style="flex:1;min-width:160px;padding:14px" onclick="openChangeExperienceFlow()">Changer d\'expérience</button>'
+                + '</div>'
+                + '</div>';
+              var todayCardElPause = document.getElementById('today-card');
+              if (todayCardElPause) todayCardElPause.style.display = 'none';
+              return;
+            }
+
             el.innerHTML =
               '<div class="action-card">'
               + '<div class="action-eyebrow">Ce cycle est terminé</div>'
