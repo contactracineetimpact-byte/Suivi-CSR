@@ -2129,8 +2129,36 @@ function renderBilanIndicateur(indicateur) {
     + '<div style="font-size:12px;color:rgba(245,240,232,.5);font-style:italic;line-height:1.5">' + indicateur.avertissement + '</div>';
 }
 
+// NOUVEAU (30/08/2026) — Réinitialisation complète de l'état du formulaire
+// de bilan. Nécessaire car s-bilan réutilise les mêmes éléments HTML d'un
+// cycle à l'autre dans une même session : sans cette remise à zéro
+// explicite, le texte, les curseurs, le select et surtout la décision
+// sélectionnée (bilanSelectedDecision) restaient ceux du bilan précédent —
+// avec un risque réel qu'une décision périmée soit soumise sans que
+// l'utilisateur la resélectionne consciemment. Appelée à l'ouverture
+// (avant même de savoir si un bilan existe) et après une soumission
+// réussie — jamais ailleurs, jamais automatiquement à intervalle.
+function resetBilanForm() {
+  ['bilan-realite', 'bilan-resultat-justif', 'bilan-identite-comportement', 'bilan-alignement-justif', 'bilan-apprentissage'].forEach(function(id) {
+    var el = document.getElementById(id);
+    el.value = '';
+    el.classList.remove('error');
+  });
+  ['resultat', 'facilite', 'identite', 'alignement'].forEach(function(key) {
+    document.getElementById('bilan-sl-' + key).value = 3;
+    document.getElementById('bilan-val-' + key).textContent = 3;
+  });
+  document.getElementById('bilan-facteur').selectedIndex = 0;
+  document.getElementById('bilan-suggestion').style.display = 'none';
+  document.getElementById('bilan-realite-err').style.display = 'none';
+  document.getElementById('bilan-apprentissage-err').style.display = 'none';
+  document.getElementById('bilan-decision-err').style.display = 'none';
+  bilanSelectedDecision = null;
+}
+
 function openBilan() {
   showScreen('s-bilan');
+  resetBilanForm();
   document.getElementById('bilan-loading').style.display = 'block';
   document.getElementById('bilan-error').style.display = 'none';
   document.getElementById('bilan-summary').style.display = 'none';
@@ -2258,6 +2286,7 @@ function submitBilan() {
         return;
       }
       document.getElementById('bilan-form').style.display = 'none';
+      resetBilanForm();
       openBilan(); // recharge en vue lecture seule, depuis le serveur
     })
     .catch(function(e) {
