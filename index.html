@@ -234,7 +234,7 @@ canvas{width:100%;height:100%}
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
         <button class="btn-ghost" onclick="goHub()" style="padding:9px 13px;font-size:18px;line-height:1" title="Accueil">⌂</button>
-        <button class="btn-ghost" onclick="exportPDF()" style="padding:9px 13px;font-size:18px;line-height:1" title="Télécharger le bilan">↓</button>
+        <button class="btn-ghost" onclick="exportPDF()" style="padding:9px 13px;font-size:18px;line-height:1" title="Télécharger mon parcours">↓</button>
         <button class="btn-ghost" onclick="confirmReset()" style="padding:9px 13px;font-size:18px;line-height:1;color:#c0392b;border-color:rgba(192,57,43,.3)" title="Réinitialiser">↺</button>
         <button class="btn-ghost" onclick="doLogout()" style="padding:9px 13px;font-size:18px;line-height:1" title="Quitter">×</button>
       </div>
@@ -688,7 +688,7 @@ canvas{width:100%;height:100%}
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn-ghost" onclick="goHub()" style="font-size:13px">⌂ Accueil</button>
-        <button class="btn-ghost" onclick="exportPDF()" style="font-size:13px">↓ Télécharger le bilan</button>
+        <button class="btn-ghost" onclick="exportPDF()" style="font-size:13px">↓ Télécharger mon parcours</button>
       </div>
     </div>
 
@@ -1594,10 +1594,28 @@ function doReset() {
 }
 
 // ── EXPORT PDF ────────────────────────────────────────────
+// MIS À JOUR (30/08/2026) — Chantier 11 : « Mon parcours Racine & Impact ».
+// Devient asynchrone — récupère une seule fois get-experience +
+// get-cycle-summary (mêmes routes déjà utilisées par Progression/badges,
+// aucune nouvelle), réutilisées pour les 4 nouvelles sections. Les
+// sections legacy (AO/AI/CE) restent, mais uniquement si elles ont une
+// vraie donnée — un client 100% ANCRAGE/RUPTURE ne les verra jamais.
+// Aucune section sans donnée exploitable n'est jamais affichée avec un
+// contenu de substitution — elle est simplement omise.
 function exportPDF() {
   if (!client) return;
+
+  Promise.all([
+    fetch('/api/get-experience?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' }).then(function(r) { return r.json(); }).catch(function() { return { hasExperience: false }; }),
+    fetch('/api/get-cycle-summary?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' }).then(function(r) { return r.json(); }).catch(function() { return { hasCycle: false }; }),
+  ]).then(function(results) {
+    buildAndDownloadParcours(results[0], results[1]);
+  });
+}
+
+function buildAndDownloadParcours(expData, cycleData) {
   var now = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-  var html = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"/><title>Bilan CSR — ' + client.prenom + '</title><style>';
+  var html = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"/><title>Mon parcours — ' + client.prenom + '</title><style>';
   html += 'body{font-family:Georgia,serif;max-width:680px;margin:0 auto;padding:48px 40px;color:#1a1a1a;font-size:15px}';
   html += '.header{border-bottom:2px solid #16276B;padding-bottom:20px;margin-bottom:28px}';
   html += '.brand{font-size:11px;font-weight:bold;color:#16276B;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px}';
@@ -1620,12 +1638,85 @@ function exportPDF() {
   html += '.qf-title{font-size:11px;font-weight:bold;color:#16276B;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px}';
   html += '.qf-text{font-size:16px;font-style:italic;line-height:1.6}';
   html += '.footer{margin-top:40px;padding-top:16px;border-top:1px solid #eee;font-size:11px;color:#aaa;text-align:center}';
+  // NOUVEAU (30/08/2026) — styles pour les 4 sections ANCRAGE/RUPTURE.
+  html += '.parcours-intro{font-size:14px;color:#555;line-height:1.6;margin-bottom:6px}';
+  html += '.evo-block{border:1px solid #eee;border-radius:6px;padding:16px;margin-bottom:14px}';
+  html += '.evo-question{font-size:12px;color:#888;font-style:italic;margin-bottom:10px}';
+  html += '.evo-label{font-size:10px;font-weight:bold;color:#aaa;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px}';
+  html += '.evo-reponse{font-size:14px;color:#222;font-style:italic;margin-bottom:10px}';
+  html += '.evo-arrow{text-align:center;color:#c9a84c;font-size:14px;margin:4px 0}';
+  html += '.preuves-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}';
+  html += '.preuve-item{background:#f7f5f0;border-radius:6px;padding:10px 16px;font-size:13px;color:#333}';
   html += '</style></head><body>';
 
   html += '<div class="header"><div class="brand">Racine &amp; Impact</div>';
-  html += '<div class="title">Bilan de progression — ' + client.prenom + '</div>';
+  html += '<div class="title">Mon parcours — ' + client.prenom + '</div>';
   html += '<div class="sub">Programme 60 jours · Exporté le ' + now + '</div></div>';
 
+  var hasParcours = expData && expData.hasExperience && expData.locked && cycleData && cycleData.hasCycle;
+
+  if (hasParcours) {
+    var moteurLabel = expData.moteur === 'ANCRAGE' ? 'ANCRAGE' : 'RUPTURE';
+    var signalTexte = expData.checkinContext ? expData.checkinContext.signal : null;
+    var cycles = cycleData.cycles || [];
+
+    // ── 1. MON POINT DE DÉPART ──────────────────────────────────
+    html += '<div class="section-title">Mon point de départ</div>';
+    html += '<div class="seance-block">';
+    if (expData.objectif) html += '<div class="parcours-intro"><b>Objectif :</b> ' + escapeHtml(expData.objectif) + '</div>';
+    html += '<div class="parcours-intro"><b>Moteur :</b> ' + moteurLabel + '</div>';
+    if (signalTexte) html += '<div class="parcours-intro"><b>Signal travaillé :</b> ' + escapeHtml(signalTexte) + '</div>';
+    html += '</div>';
+
+    // ── 2. MES EXPÉRIMENTATIONS ─────────────────────────────────
+    if (cycles.length > 0) {
+      html += '<div class="section-title">Mes expérimentations</div>';
+      cycles.forEach(function(c) {
+        html += '<div class="seance-block"><div class="seance-head">'
+          + '<div class="seance-num">' + escapeHtml(c.nomCycle || 'Cycle') + '</div>'
+          + (c.dateDebut ? '<div class="seance-date">' + formatDateFr(c.dateDebut) + (c.dateFin ? ' au ' + formatDateFr(c.dateFin) : '') + '</div>' : '')
+          + '</div>';
+        if (c.actionsPrevues) html += '<div class="s-just"><b>Ce que je testais :</b> ' + escapeHtml(c.actionsPrevues) + '</div>';
+        if (c.alreadyEvaluated && c.apprentissage) html += '<div class="s-just"><b>Ce que j\'ai appris :</b> ' + escapeHtml(c.apprentissage) + '</div>';
+        if (c.alreadyEvaluated && c.decisionSuivante) html += '<div class="s-just"><b>Ma décision :</b> ' + escapeHtml(c.decisionSuivante) + '</div>';
+        html += '</div>';
+      });
+    }
+
+    // ── 3. CE QUI A CHANGÉ ──────────────────────────────────────
+    var evolutions = cycleData.evolutions || [];
+    if (evolutions.length > 0) {
+      html += '<div class="section-title">Ce qui a changé</div>';
+      evolutions.forEach(function(ev) {
+        html += '<div class="evo-block">';
+        if (ev.question) html += '<div class="evo-question">' + escapeHtml(ev.question) + '</div>';
+        html += '<div class="evo-label">' + escapeHtml(ev.premiereCycleLabel || 'Premier cycle') + '</div>';
+        html += '<div class="evo-reponse">« ' + escapeHtml(ev.premiereReponse) + ' »</div>';
+        html += '<div class="evo-arrow">↓</div>';
+        html += '<div class="evo-label">' + escapeHtml(ev.derniereCycleLabel || 'Dernier cycle') + '</div>';
+        html += '<div class="evo-reponse" style="margin-bottom:0">« ' + escapeHtml(ev.derniereReponse) + ' »</div>';
+        html += '</div>';
+      });
+    }
+
+    // ── 4. MES PREUVES ──────────────────────────────────────────
+    var preuves = cycleData.preuves;
+    if (preuves && (preuves.observations > 0 || preuves.cycles > 0)) {
+      html += '<div class="section-title">Mes preuves</div>';
+      html += '<div class="preuves-row">';
+      html += '<div class="preuve-item">' + preuves.observations + ' observation' + (preuves.observations !== 1 ? 's' : '') + '</div>';
+      if (preuves.labelSecondaire === 'signal identifié') {
+        html += '<div class="preuve-item">' + preuves.compteurSecondaire + ' ' + (preuves.compteurSecondaire !== 1 ? 'signaux' : 'signal') + ' identifié' + (preuves.compteurSecondaire !== 1 ? 's' : '') + '</div>';
+      } else if (preuves.labelSecondaire === 'interception réussie') {
+        html += '<div class="preuve-item">' + preuves.compteurSecondaire + ' interception' + (preuves.compteurSecondaire !== 1 ? 's' : '') + ' réussie' + (preuves.compteurSecondaire !== 1 ? 's' : '') + '</div>';
+      }
+      html += '<div class="preuve-item">' + preuves.cycles + ' cycle' + (preuves.cycles !== 1 ? 's' : '') + '</div>';
+      if (preuves.decisions > 0) html += '<div class="preuve-item">' + preuves.decisions + ' décision' + (preuves.decisions !== 1 ? 's' : '') + '</div>';
+      html += '</div>';
+    }
+  }
+
+  // ── Sections legacy — conservées uniquement si donnée réelle ─────
   if (seances.length) {
     var last = seances[seances.length - 1];
     var first = seances[0];
@@ -1636,23 +1727,22 @@ function exportPDF() {
       html += '<div class="score-start">Départ : ' + first[d[0]] + d[3] + '</div></div>';
     });
     html += '</div>';
+
+    html += '<div class="section-title">Détail des séances</div>';
+    seances.forEach(function(s, i) {
+      html += '<div class="seance-block"><div class="seance-head"><div class="seance-num">Séance ' + (i+1) + '</div><div class="seance-date">' + s.date + '</div></div>';
+      html += '<div class="scores-row">';
+      html += '<div class="s-score" style="color:#16276B">AO : ' + s.ao + '/10</div>';
+      html += '<div class="s-score" style="color:#c9a84c">AI : ' + s.ai + '/10</div>';
+      html += '<div class="s-score" style="color:#8B6914">CE : ' + s.ce + '%</div>';
+      html += '</div>';
+      if (s.justAo) html += '<div class="s-just"><b>AO :</b> ' + s.justAo + '</div>';
+      if (s.justAi) html += '<div class="s-just"><b>AI :</b> ' + s.justAi + '</div>';
+      if (s.justCe) html += '<div class="s-just"><b>CE :</b> ' + s.justCe + '</div>';
+      html += '</div>';
+    });
   }
 
-  html += '<div class="section-title">Détail des séances</div>';
-  seances.forEach(function(s, i) {
-    html += '<div class="seance-block"><div class="seance-head"><div class="seance-num">Séance ' + (i+1) + '</div><div class="seance-date">' + s.date + '</div></div>';
-    html += '<div class="scores-row">';
-    html += '<div class="s-score" style="color:#16276B">AO : ' + s.ao + '/10</div>';
-    html += '<div class="s-score" style="color:#c9a84c">AI : ' + s.ai + '/10</div>';
-    html += '<div class="s-score" style="color:#8B6914">CE : ' + s.ce + '%</div>';
-    html += '</div>';
-    if (s.justAo) html += '<div class="s-just"><b>AO :</b> ' + s.justAo + '</div>';
-    if (s.justAi) html += '<div class="s-just"><b>AI :</b> ' + s.justAi + '</div>';
-    if (s.justCe) html += '<div class="s-just"><b>CE :</b> ' + s.justCe + '</div>';
-    html += '</div>';
-  });
-
-  // Engagements actuels et taux de réalisation
   var eng = load('engagements_' + code);
   if (eng && eng.items && eng.items.length) {
     var validatedDays = Object.keys(load('validated_' + code) || {}).length;
@@ -1665,7 +1755,6 @@ function exportPDF() {
     html += '</div>';
   }
 
-  // Racines rencontrées sur l'ensemble de l'accompagnement
   var racinesTally = computeRacinesTally(null);
   if (racinesTally.length) {
     html += '<div class="section-title">Racines les plus fréquentes</div>';
@@ -1683,7 +1772,7 @@ function exportPDF() {
   var blob = new Blob([html], { type: 'text/html' });
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
-  a.href = url; a.download = 'Bilan-CSR-' + client.prenom + '.html'; a.click();
+  a.href = url; a.download = 'Mon-parcours-' + client.prenom + '.html'; a.click();
   URL.revokeObjectURL(url);
 }
 
