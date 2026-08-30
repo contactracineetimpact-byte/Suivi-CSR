@@ -2762,6 +2762,12 @@ function renderContextualBanner() {
 // api/get-cycle-summary.js). Aucun score inventé, aucun pourcentage
 // fabriqué : seul `indicateur`, déjà calculé côté serveur à partir des
 // vrais check-ins avec un seuil de prudence, est affiché tel quel.
+// MIS À JOUR (30/08/2026) — Chantier 7 : lecture verticale narrative —
+// Mon histoire jusqu'ici / Ce que j'ai expérimenté et découvert / Mes
+// preuves — plutôt qu'un résumé statique ou un accordéon technique.
+// Toujours les deux mêmes appels (get-experience + get-cycle-summary),
+// aucun de plus. Aucune conclusion inventée : décision = décision,
+// apprentissage = apprentissage, jamais reformulés ni interprétés.
 function renderExperienceProgress() {
   var el = document.getElementById('experience-progress-block');
   if (!el) return;
@@ -2786,12 +2792,13 @@ function renderExperienceProgress() {
             : null;
           var enCours = !cycleData.alreadyEvaluated;
           var cycles = cycleData.cycles || [];
+          var statutLabel = expData.statut || null;
 
           var html = '';
 
-          // ── NIVEAU 1 — MAINTENANT ──────────────────────────────────
+          // ── NIVEAU 1 — MON HISTOIRE JUSQU'ICI ──────────────────────
           html += '<div class="chart-card">';
-          html += '<div class="chart-title">Maintenant</div>';
+          html += '<div class="chart-title">Mon histoire jusqu\'ici</div>';
           html += '<div class="score-block-name" style="margin-bottom:2px">'
             + escapeHtml(expData.nomExperience || moteurLabel) + '</div>'
             + '<div style="font-size:11px;color:var(--or);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">' + moteurLabel + '</div>';
@@ -2799,58 +2806,75 @@ function renderExperienceProgress() {
             + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">Mon objectif</div>'
             + '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(expData.objectif || '—') + '</div>'
             + '</div>';
-          html += '<div style="margin-bottom:14px">'
-            + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">' + escapeHtml(cycleData.nomCycle || 'Cycle') + (enCours ? ' — en cours' : ' — clos') + '</div>'
-            + (actionTexte ? '<div style="font-size:14px;color:var(--creme);line-height:1.5">Ce que je teste : ' + escapeHtml(actionTexte) + '</div>' : '')
+          html += '<div style="font-size:13px;color:rgba(245,240,232,.65);margin-bottom:10px">'
+            + cycles.length + ' cycle' + (cycles.length > 1 ? 's' : '') + ' réalisé' + (cycles.length > 1 ? 's' : '')
+            + (statutLabel && statutLabel !== 'Test en cours' ? ' · Statut : ' + escapeHtml(statutLabel) : '')
             + '</div>';
-          // Indicateur factuel, déjà calculé côté serveur — jamais un
-          // pourcentage de "réussite", jamais fabriqué ici.
-          if (cycleData.indicateur) {
-            if (cycleData.indicateur.insuffisant) {
-              html += '<div style="font-size:12px;color:rgba(245,240,232,.5);font-style:italic">Pas encore assez d\'observations pour tirer une conclusion (' + cycleData.indicateur.observations + ' sur ' + cycleData.indicateur.seuil + ' minimum).</div>';
-            } else if (cycleData.indicateur.type) {
-              html += '<div style="font-size:13px;color:var(--or)">' + escapeHtml(cycleData.indicateur.type) + ' : <b>' + cycleData.indicateur.valeur + ' sur ' + cycleData.indicateur.total + '</b></div>';
-            }
+          if (enCours) {
+            html += '<div>'
+              + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">' + escapeHtml(cycleData.nomCycle || 'Cycle') + ' — en cours</div>'
+              + (actionTexte ? '<div style="font-size:14px;color:var(--creme);line-height:1.5">Ce que je teste : ' + escapeHtml(actionTexte) + '</div>' : '')
+              + '</div>';
           }
           html += '</div>';
 
-          // ── NIVEAU 2 — MES CYCLES (timeline, accordéon) ────────────
+          // ── NIVEAU 2 — CE QUE J'AI EXPÉRIMENTÉ ET DÉCOUVERT ────────
+          // Lecture chronologique continue, avec un lien visuel (flèche)
+          // entre un cycle et le suivant — pas une liste plate, une
+          // boucle d'apprentissage. Aucune interprétation : la décision
+          // affichée est celle écrite par le client, jamais déduite.
           if (cycles.length > 0) {
             html += '<div class="chart-card">';
-            html += '<div class="chart-title">Mes cycles</div>';
+            html += '<div class="chart-title">Ce que j\'ai expérimenté et découvert</div>';
             cycles.forEach(function(c, i) {
               var estActuel = c.cycleId === cycleData.cycleId;
-              var puce = c.alreadyEvaluated ? '✓' : (estActuel ? '●' : '○');
-              var puceColor = c.alreadyEvaluated ? '#8fbf8f' : (estActuel ? 'var(--or)' : 'rgba(245,240,232,.4)');
-              html += '<div style="border-bottom:1px solid rgba(245,240,232,.1);padding:10px 0" class="progress-cycle-row">';
-              html += '<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="toggleProgressCycle(' + i + ')">';
-              html += '<span style="color:' + puceColor + ';font-size:16px">' + puce + '</span>';
-              html += '<span style="font-size:14px;color:var(--creme);flex:1">' + escapeHtml(c.nomCycle || ('Cycle ' + c.numeroCycle)) + '</span>';
-              html += (c.decisionSuivante ? '<span style="font-size:12px;color:rgba(245,240,232,.55)">' + escapeHtml(c.decisionSuivante) + '</span>' : (estActuel ? '<span style="font-size:12px;color:var(--or)">en cours</span>' : ''));
+              html += '<div style="padding:12px 0' + (i < cycles.length - 1 ? ';border-bottom:none' : '') + '">';
+              html += '<div style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:' + (estActuel ? 'var(--or)' : 'rgba(245,240,232,.6)') + ';margin-bottom:6px">'
+                + escapeHtml(c.nomCycle || ('Cycle ' + c.numeroCycle)) + (estActuel && enCours ? ' — en cours' : '') + '</div>';
+              if (c.actionsPrevues) {
+                html += '<div style="font-size:13px;color:var(--creme);line-height:1.6;margin-bottom:4px"><span style="color:rgba(245,240,232,.5)">J\'ai testé :</span> ' + escapeHtml(c.actionsPrevues) + '</div>';
+              }
+              if (c.alreadyEvaluated) {
+                if (c.apprentissage) {
+                  html += '<div style="font-size:13px;color:var(--creme);line-height:1.6;margin-bottom:4px"><span style="color:rgba(245,240,232,.5)">J\'ai découvert :</span> ' + escapeHtml(c.apprentissage) + '</div>';
+                }
+                if (c.decisionSuivante) {
+                  html += '<div style="font-size:13px;color:var(--creme);line-height:1.6"><span style="color:rgba(245,240,232,.5)">J\'ai décidé :</span> <b>' + escapeHtml(c.decisionSuivante) + '</b></div>';
+                }
+              } else {
+                html += '<div style="font-size:13px;color:rgba(245,240,232,.5);font-style:italic">En cours — pas encore de bilan.</div>';
+              }
               html += '</div>';
-              html += '<div id="progress-cycle-detail-' + i + '" style="display:none;margin-top:8px;padding-left:26px;font-size:13px;color:rgba(245,240,232,.7);line-height:1.6">';
-              if (c.dateDebut) html += '<div>Du ' + formatDateFr(c.dateDebut) + (c.dateFin ? ' au ' + formatDateFr(c.dateFin) : '') + '</div>';
-              if (c.apprentissage) html += '<div style="margin-top:4px">' + escapeHtml(c.apprentissage) + '</div>';
-              if (!c.apprentissage && !c.alreadyEvaluated) html += '<div style="font-style:italic;color:rgba(245,240,232,.45)">Pas encore de bilan pour ce cycle.</div>';
-              html += '</div>';
-              html += '</div>';
+              if (i < cycles.length - 1) {
+                html += '<div style="text-align:center;color:var(--or);font-size:16px;opacity:.6;padding:2px 0">↓</div>';
+              }
             });
             html += '</div>';
           }
 
-          // ── NIVEAU 3 — CE QUE J'AI APPRIS (synthèse chronologique) ──
-          var cyclesAvecApprentissage = cycles.filter(function(c) { return c.apprentissage; });
-          if (cyclesAvecApprentissage.length > 0) {
+          // ── NIVEAU 3 — MES PREUVES ─────────────────────────────────
+          // Uniquement des faits comptés, jamais un score ou un
+          // pourcentage de "réussite" fabriqué. Le ratio n'apparaît que
+          // s'il est déjà calculé avec son dénominateur (indicateur).
+          var citations = cycleData.citations || [];
+          var aDesPreuves = (cycleData.totalObservations > 0) || citations.length > 0;
+          if (aDesPreuves) {
             html += '<div class="chart-card">';
-            html += '<div class="chart-title">Ce que j\'ai appris</div>';
-            cyclesAvecApprentissage.forEach(function(c) {
-              html += '<div style="margin-bottom:12px">'
-                + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">' + escapeHtml(c.nomCycle || ('Cycle ' + c.numeroCycle)) + '</div>'
-                + '<div style="font-size:14px;color:var(--creme);line-height:1.6;font-style:italic">« ' + escapeHtml(c.apprentissage) + ' »</div>'
-                + '</div>';
-            });
-            if (enCours) {
-              html += '<div style="font-size:13px;color:rgba(245,240,232,.5)">' + escapeHtml(cycleData.nomCycle || 'Ce cycle') + ' : en cours de test.</div>';
+            html += '<div class="chart-title">Mes preuves</div>';
+            if (cycleData.totalObservations > 0) {
+              html += '<div style="font-size:13px;color:var(--creme);margin-bottom:6px">' + cycleData.totalObservations + ' observation' + (cycleData.totalObservations > 1 ? 's' : '') + ' enregistrée' + (cycleData.totalObservations > 1 ? 's' : '') + '</div>';
+            }
+            if (cycleData.indicateur && cycleData.indicateur.insuffisant) {
+              html += '<div style="font-size:13px;color:var(--creme);margin-bottom:6px">Signal identifié ' + cycleData.indicateur.observations + ' fois</div>';
+              html += '<div style="font-size:12px;color:rgba(245,240,232,.5);font-style:italic;margin-bottom:6px">Pas encore assez d\'observations pour un ratio fiable (' + cycleData.indicateur.seuil + ' minimum).</div>';
+            } else if (cycleData.indicateur && cycleData.indicateur.type) {
+              html += '<div style="font-size:13px;color:var(--creme);margin-bottom:6px">Signal identifié ' + cycleData.indicateur.total + ' fois</div>';
+              html += '<div style="font-size:13px;color:var(--or)">' + escapeHtml(cycleData.indicateur.type) + ' : <b>' + cycleData.indicateur.valeur + ' sur ' + cycleData.indicateur.total + '</b></div>';
+            }
+            if (citations.length > 0) {
+              citations.forEach(function(cit) {
+                html += '<div style="font-size:13px;color:rgba(245,240,232,.75);font-style:italic;line-height:1.6;margin-top:10px;padding-left:12px;border-left:2px solid rgba(245,240,232,.15)">« ' + escapeHtml(cit) + ' »</div>';
+              });
             }
             html += '</div>';
           }
@@ -2874,15 +2898,6 @@ function renderExperienceProgress() {
       el.style.display = 'none';
       el.innerHTML = '';
     });
-}
-
-// NOUVEAU (30/08/2026) — Chantier 5 : ouvre/ferme le détail d'un cycle
-// dans la timeline "Mes cycles", sans requête réseau (donnée déjà en
-// mémoire dans le HTML généré par renderExperienceProgress()).
-function toggleProgressCycle(i) {
-  var detail = document.getElementById('progress-cycle-detail-' + i);
-  if (!detail) return;
-  detail.style.display = detail.style.display === 'none' ? 'block' : 'none';
 }
 
 function showScreen(id) {
