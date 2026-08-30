@@ -2211,6 +2211,13 @@ function pcWrap(title, subtitle, buttonsHtml) {
   html += '<div class="action-question" style="font-size:19px">' + title + '</div>';
   if (subtitle) html += '<div style="font-size:13px;color:rgba(245,240,232,.6);margin-bottom:14px;font-style:italic">' + escapeHtml(subtitle) + '</div>';
   html += '<div style="display:flex;gap:10px;margin-top:10px">' + buttonsHtml + '</div>';
+  var todayCardEl = document.getElementById('today-card');
+  // NOUVEAU (30/08/2026) — révélation précise au moment où du contenu réel
+  // et résolu est effectivement injecté (Etats B/C uniquement, via
+  // checkPersonalizedCheckin -> pcRenderStep('signal') -> pcWrap). Corrige
+  // le flash legacy : la carte ne s'affiche plus tant qu'aucun contenu
+  // définitif n'est prêt à y être écrit.
+  if (todayCardEl) todayCardEl.style.display = '';
   document.getElementById('today-card').innerHTML = html;
 }
 
@@ -2374,13 +2381,6 @@ function renderContextualBanner() {
   fetch('/api/get-experience?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
     .then(function(r) { return r.json(); })
     .then(function(expData) {
-      // (28/08/2026, corrigé le même jour) — On réaffiche #today-card par
-      // défaut à chaque calcul frais, pour ne jamais la laisser masquée
-      // durablement après un passage en État A suivi de la création d'une
-      // expérience (sinon le point du jour personnalisé resterait invisible).
-      var todayCardElReset = document.getElementById('today-card');
-      if (todayCardElReset) todayCardElReset.style.display = '';
-
       if (!expData.hasExperience) {
         // État A — aucune expérience active.
         el.style.display = 'block';
@@ -2461,14 +2461,13 @@ function renderContextualBanner() {
                   : '')
               + '<div style="font-size:13px;color:rgba(245,240,232,.55);margin-top:10px;font-style:italic">La prochaine étape reste à définir avec Franck.</div>'
               + '</div>';
-            // NOUVEAU (30/08/2026) — masque explicitement la carte du
-            // point du jour ici aussi. Nécessaire car cette fonction
-            // réinitialise today-card à visible en tout début d'exécution
-            // (voir todayCardElReset plus haut) ; sans ce masquage
-            // explicite, une exécution de renderContextualBanner() après
-            // celle de checkPersonalizedCheckin() réafficherait la carte
-            // que cette dernière venait de masquer — même pattern que la
-            // branche État A ci-dessus.
+            // (30/08/2026) — masque explicitement la carte du point du
+            // jour, en complément du masquage déjà fait côté
+            // checkPersonalizedCheckin() pour ce même état — la carte est
+            // désormais invisible par défaut et n'est révélée que par
+            // pcWrap() au moment d'un contenu B/C résolu ; ce masquage ici
+            // garantit que la branche État D reste explicite, sans
+            // dépendre de l'ordre d'exécution entre les deux fonctions.
             var todayCardElD = document.getElementById('today-card');
             if (todayCardElD) todayCardElD.style.display = 'none';
             return;
