@@ -2740,6 +2740,14 @@ function renderContextualBanner() {
 // reste géré uniquement par la bannière d'accueil). Fail-safe : toute
 // erreur réseau laisse le bloc invisible et ne touche à rien d'autre.
 // ═══════════════════════════════════════════════════════════
+// MIS À JOUR (30/08/2026) — Chantier 5 : Progression à 3 niveaux —
+// Maintenant / Mes cycles / Ce que j'ai appris — plutôt qu'un simple
+// résumé du dernier cycle. Réutilise get-experience + get-cycle-summary,
+// les deux mêmes appels qu'avant (get-cycle-summary renvoie désormais
+// aussi `cycles`, l'historique complet, sans appel supplémentaire — voir
+// api/get-cycle-summary.js). Aucun score inventé, aucun pourcentage
+// fabriqué : seul `indicateur`, déjà calculé côté serveur à partir des
+// vrais check-ins avec un seuil de prudence, est affiché tel quel.
 function renderExperienceProgress() {
   var el = document.getElementById('experience-progress-block');
   if (!el) return;
@@ -2756,66 +2764,89 @@ function renderExperienceProgress() {
       return fetch('/api/get-cycle-summary?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
         .then(function(r) { return r.json(); })
         .then(function(cycleData) {
-          var moteurLabel = expData.moteur === 'ANCRAGE' ? 'ANCRAGE' : 'RUPTURE';
-          var cycleLabel = cycleData && cycleData.hasCycle && cycleData.nomCycle ? cycleData.nomCycle : null;
+          if (!cycleData || !cycleData.hasCycle) return;
 
+          var moteurLabel = expData.moteur === 'ANCRAGE' ? 'ANCRAGE' : 'RUPTURE';
           var actionTexte = expData.checkinContext
             ? (expData.moteur === 'ANCRAGE' ? expData.checkinContext.action : expData.checkinContext.alternative)
             : null;
+          var enCours = !cycleData.alreadyEvaluated;
+          var cycles = cycleData.cycles || [];
 
-          var jourTexte = '';
+          var html = '';
+
+          // ── NIVEAU 1 — MAINTENANT ──────────────────────────────────
+          html += '<div class="chart-card">';
+          html += '<div class="chart-title">Maintenant</div>';
+          html += '<div class="score-block-name" style="margin-bottom:10px">'
+            + moteurLabel + (expData.nomExperience ? ' — ' + escapeHtml(expData.nomExperience) : '') + '</div>';
+          html += '<div style="margin-bottom:14px">'
+            + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">Mon objectif</div>'
+            + '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(expData.objectif || '—') + '</div>'
+            + '</div>';
+          html += '<div style="margin-bottom:14px">'
+            + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">' + escapeHtml(cycleData.nomCycle || 'Cycle') + (enCours ? ' — en cours' : ' — clos') + '</div>'
+            + (actionTexte ? '<div style="font-size:14px;color:var(--creme);line-height:1.5">Ce que je teste : ' + escapeHtml(actionTexte) + '</div>' : '')
+            + '</div>';
+          // Indicateur factuel, déjà calculé côté serveur — jamais un
+          // pourcentage de "réussite", jamais fabriqué ici.
+          if (cycleData.indicateur) {
+            if (cycleData.indicateur.insuffisant) {
+              html += '<div style="font-size:12px;color:rgba(245,240,232,.5);font-style:italic">Pas encore assez d\'observations pour tirer une conclusion (' + cycleData.indicateur.observations + ' sur ' + cycleData.indicateur.seuil + ' minimum).</div>';
+            } else if (cycleData.indicateur.type) {
+              html += '<div style="font-size:13px;color:var(--or)">' + escapeHtml(cycleData.indicateur.type) + ' : <b>' + cycleData.indicateur.valeur + ' sur ' + cycleData.indicateur.total + '</b></div>';
+            }
+          }
+          html += '</div>';
+
+          // ── NIVEAU 2 — MES CYCLES (timeline, accordéon) ────────────
+          if (cycles.length > 0) {
+            html += '<div class="chart-card">';
+            html += '<div class="chart-title">Mes cycles</div>';
+            cycles.forEach(function(c, i) {
+              var estActuel = c.cycleId === cycleData.cycleId;
+              var puce = c.alreadyEvaluated ? '✓' : (estActuel ? '●' : '○');
+              var puceColor = c.alreadyEvaluated ? '#8fbf8f' : (estActuel ? 'var(--or)' : 'rgba(245,240,232,.4)');
+              html += '<div style="border-bottom:1px solid rgba(245,240,232,.1);padding:10px 0" class="progress-cycle-row">';
+              html += '<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="toggleProgressCycle(' + i + ')">';
+              html += '<span style="color:' + puceColor + ';font-size:16px">' + puce + '</span>';
+              html += '<span style="font-size:14px;color:var(--creme);flex:1">' + escapeHtml(c.nomCycle || ('Cycle ' + c.numeroCycle)) + '</span>';
+              html += (c.decisionSuivante ? '<span style="font-size:12px;color:rgba(245,240,232,.55)">' + escapeHtml(c.decisionSuivante) + '</span>' : (estActuel ? '<span style="font-size:12px;color:var(--or)">en cours</span>' : ''));
+              html += '</div>';
+              html += '<div id="progress-cycle-detail-' + i + '" style="display:none;margin-top:8px;padding-left:26px;font-size:13px;color:rgba(245,240,232,.7);line-height:1.6">';
+              if (c.dateDebut) html += '<div>Du ' + escapeHtml(c.dateDebut) + (c.dateFin ? ' au ' + escapeHtml(c.dateFin) : '') + '</div>';
+              if (c.apprentissage) html += '<div style="margin-top:4px">' + escapeHtml(c.apprentissage) + '</div>';
+              if (!c.apprentissage && !c.alreadyEvaluated) html += '<div style="font-style:italic;color:rgba(245,240,232,.45)">Pas encore de bilan pour ce cycle.</div>';
+              html += '</div>';
+              html += '</div>';
+            });
+            html += '</div>';
+          }
+
+          // ── NIVEAU 3 — CE QUE J'AI APPRIS (synthèse chronologique) ──
+          var cyclesAvecApprentissage = cycles.filter(function(c) { return c.apprentissage; });
+          if (cyclesAvecApprentissage.length > 0) {
+            html += '<div class="chart-card">';
+            html += '<div class="chart-title">Ce que j\'ai appris</div>';
+            cyclesAvecApprentissage.forEach(function(c) {
+              html += '<div style="margin-bottom:12px">'
+                + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">' + escapeHtml(c.nomCycle || ('Cycle ' + c.numeroCycle)) + '</div>'
+                + '<div style="font-size:14px;color:var(--creme);line-height:1.6;font-style:italic">« ' + escapeHtml(c.apprentissage) + ' »</div>'
+                + '</div>';
+            });
+            if (enCours) {
+              html += '<div style="font-size:13px;color:rgba(245,240,232,.5)">' + escapeHtml(cycleData.nomCycle || 'Ce cycle') + ' : en cours de test.</div>';
+            }
+            html += '</div>';
+          }
+
           var start = load('program_start_' + code);
           if (start) {
             var startDate = new Date(start);
             var today = new Date();
-            var dayNum = Math.floor((today - startDate) / 86400000) + 1;
-            dayNum = Math.max(1, Math.min(dayNum, 60));
-            jourTexte = 'Jour ' + dayNum + ' / 60';
+            var dayNum = Math.max(1, Math.min(Math.floor((today - startDate) / 86400000) + 1, 60));
+            html += '<div style="font-size:12px;color:rgba(245,240,232,.4);text-align:center;margin-top:-6px">Jour ' + dayNum + ' / 60</div>';
           }
-
-          var html = '<div class="chart-card">';
-          html += '<div class="chart-title">Mon expérience</div>';
-          html += '<div class="score-block-name" style="margin-bottom:10px">'
-            + moteurLabel + (cycleLabel ? ' — ' + escapeHtml(cycleLabel) : '') + '</div>';
-
-          html += '<div style="margin-bottom:14px">'
-            + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">Ce que je cherche à changer</div>'
-            + '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(expData.objectif || '—') + '</div>'
-            + '</div>';
-
-          if (actionTexte) {
-            html += '<div style="margin-bottom:14px">'
-              + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">Ce que je teste</div>'
-              + '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(actionTexte) + '</div>'
-              + '</div>';
-          }
-
-          // Apprentissage / décision : uniquement si le dernier cycle est
-          // réellement évalué. Si le cycle est terminé mais pas encore
-          // évalué (alreadyEvaluated === false), on n'affiche ni ces deux
-          // champs ni aucun message de substitution — ce bloc est une
-          // preuve de progression, pas un système d'alerte ; l'invitation
-          // à faire le bilan relève du parcours "Rendez-vous", pas d'ici.
-          if (cycleData && cycleData.alreadyEvaluated && cycleData.bilan) {
-            if (cycleData.bilan.apprentissage) {
-              html += '<div style="margin-bottom:14px">'
-                + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">Ce que j\'ai appris</div>'
-                + '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(cycleData.bilan.apprentissage) + '</div>'
-                + '</div>';
-            }
-            if (cycleData.bilan.decisionSuivante) {
-              html += '<div style="margin-bottom:14px">'
-                + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">Ma prochaine décision</div>'
-                + '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(cycleData.bilan.decisionSuivante) + '</div>'
-                + '</div>';
-            }
-          }
-
-          if (jourTexte) {
-            html += '<div style="font-size:12px;color:rgba(245,240,232,.5)">' + jourTexte + '</div>';
-          }
-
-          html += '</div>';
 
           el.innerHTML = html;
           el.style.display = 'block';
@@ -2828,6 +2859,15 @@ function renderExperienceProgress() {
       el.style.display = 'none';
       el.innerHTML = '';
     });
+}
+
+// NOUVEAU (30/08/2026) — Chantier 5 : ouvre/ferme le détail d'un cycle
+// dans la timeline "Mes cycles", sans requête réseau (donnée déjà en
+// mémoire dans le HTML généré par renderExperienceProgress()).
+function toggleProgressCycle(i) {
+  var detail = document.getElementById('progress-cycle-detail-' + i);
+  if (!detail) return;
+  detail.style.display = detail.style.display === 'none' ? 'block' : 'none';
 }
 
 function showScreen(id) {
