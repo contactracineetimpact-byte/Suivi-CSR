@@ -245,6 +245,12 @@ canvas{width:100%;height:100%}
          Alimentée par renderContextualBanner(), sans nouvelle donnée ni API. -->
     <div id="contextual-banner" style="display:none;margin-bottom:16px"></div>
 
+    <!-- NOUVEAU (30/08/2026) — Chantier 9 : "Tes preuves", visible
+         directement sur l'accueil sans clic supplémentaire vers le hub.
+         Rempli par renderHubBadges() (même fonction que le hub, données
+         cumulées sur l'expérience active). Masqué si non pertinent. -->
+    <div id="home-preuves" style="display:none;background:rgba(245,240,232,.04);border:1px solid rgba(245,240,232,.1);border-radius:8px;padding:14px 16px;margin-bottom:16px"></div>
+
     <!-- Rappel jour manqué -->
     <div id="missed-day-banner" style="display:none;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.35);border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:#D9BC66;line-height:1.5"></div>
 
@@ -874,32 +880,51 @@ function renderHubTimeline() {
   el.style.display = 'block';
 }
 
+// MIS À JOUR (30/08/2026) — Chantier 9 : remplace les badges legacy
+// (aveugles à ANCRAGE/RUPTURE, jamais mis à jour par le point du jour réel
+// — voir audit) par « Tes preuves », cumulé sur tous les cycles de
+// l'expérience active. Aucun score, aucun pourcentage, aucun classement —
+// uniquement des faits comptés, déjà calculés côté serveur
+// (get-cycle-summary.preuves). Rendu dans #hub-badges (s-hub, existant) ET
+// #home-preuves (s-home, nouveau — visible sans clic supplémentaire).
+// Masqué entièrement si aucune expérience ANCRAGE/RUPTURE n'existe.
 function renderHubBadges() {
-  var el = document.getElementById('hub-badges');
-  var validatedObj = load('validated_' + code) || {};
-  var totalValidated = Object.keys(validatedObj).length;
-  var streak = computeStreak();
-  var start = load('program_start_' + code);
-  var dayNum = start ? Math.floor((new Date() - new Date(start)) / 86400000) + 1 : 0;
+  var elHub = document.getElementById('hub-badges');
+  var elHome = document.getElementById('home-preuves');
+  if (elHub) elHub.style.display = 'none';
+  if (elHome) elHome.style.display = 'none';
 
-  var badges = [
-    { icon: '🌱', label: 'Première séance', unlocked: seances.length >= 1 },
-    { icon: '🔥', label: "3 jours d'affilée", unlocked: streak >= 3 },
-    { icon: '⭐', label: "7 jours d'affilée", unlocked: streak >= 7 },
-    { icon: '💪', label: '10 jours validés', unlocked: totalValidated >= 10 },
-    { icon: '🏔️', label: 'Mi-parcours', unlocked: dayNum >= 30 },
-    { icon: '🏆', label: '30 jours validés', unlocked: totalValidated >= 30 }
-  ];
+  fetch('/api/get-experience?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
+    .then(function(r) { return r.json(); })
+    .then(function(expData) {
+      if (!expData.hasExperience || !expData.locked) return;
 
-  var unlocked = badges.filter(function(b) { return b.unlocked; });
-  if (!unlocked.length) { el.style.display = 'none'; return; }
+      return fetch('/api/get-cycle-summary?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
+        .then(function(r) { return r.json(); })
+        .then(function(cycleData) {
+          var preuves = cycleData && cycleData.preuves;
+          if (!preuves) return;
 
-  el.innerHTML = unlocked.map(function(b) {
-    return '<div style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:12px;font-size:11px;' +
-      'background:rgba(201,168,76,.1);color:#E0C87E">' +
-      '<span style="font-size:12px">' + b.icon + '</span>' + b.label + '</div>';
-  }).join('');
-  el.style.display = 'flex';
+          var items = [];
+          items.push(preuves.observations + ' observation' + (preuves.observations !== 1 ? 's' : ''));
+          if (preuves.labelSecondaire === 'signal identifié') {
+            items.push(preuves.compteurSecondaire + ' ' + (preuves.compteurSecondaire !== 1 ? 'signaux' : 'signal') + ' identifié' + (preuves.compteurSecondaire !== 1 ? 's' : ''));
+          } else if (preuves.labelSecondaire === 'interception réussie') {
+            items.push(preuves.compteurSecondaire + ' interception' + (preuves.compteurSecondaire !== 1 ? 's' : '') + ' réussie' + (preuves.compteurSecondaire !== 1 ? 's' : ''));
+          }
+          items.push(preuves.cycles + ' cycle' + (preuves.cycles !== 1 ? 's' : ''));
+          if (preuves.decisions > 0) {
+            items.push(preuves.decisions + ' décision' + (preuves.decisions !== 1 ? 's' : ''));
+          }
+
+          var html = '<div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--or);margin-bottom:6px">Tes preuves</div>'
+            + '<div style="font-size:13px;color:var(--creme)">' + items.join(' · ') + '</div>';
+
+          if (elHub) { elHub.innerHTML = html; elHub.style.display = 'block'; }
+          if (elHome) { elHome.innerHTML = html; elHome.style.display = 'block'; }
+        });
+    })
+    .catch(function(e) { console.warn('renderHubBadges (preuves) :', e); });
 }
 
 function showDashboard() {
