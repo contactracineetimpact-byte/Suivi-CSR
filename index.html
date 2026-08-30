@@ -2135,19 +2135,60 @@ function submitBilan() {
 var pcMoteur = null;
 var pcContext = null;
 var pcAnswers = {};
+// NOUVEAU (30/08/2026) — vrai uniquement quand on sait positivement que le
+// cycle rattaché à l'expérience active a déjà été évalué. Toute incertitude
+// (échec réseau, absence de cycle) laisse cette valeur à false : on ne
+// suppose jamais qu'un cycle est terminé.
+var pcCycleEvaluated = false;
 
 function checkPersonalizedCheckin() {
   fetch('/api/get-experience?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      if (data.hasExperience && data.locked && data.checkinContext) {
-        pcMoteur = data.moteur;
-        pcContext = data.checkinContext;
-        pcAnswers = {};
-        pcRenderStep('signal');
+      if (!(data.hasExperience && data.locked && data.checkinContext)) {
+        // Si pas d'expérience active/verrouillée : on ne touche à rien,
+        // l'ancien système déjà rendu par renderToday() reste visible.
+        return;
       }
-      // Si pas d'expérience active/verrouillée : on ne touche à rien,
-      // l'ancien système déjà rendu par renderToday() reste visible.
+
+      // NOUVEAU (30/08/2026) — Avant d'afficher le point du jour, vérifier
+      // que le cycle rattaché à cette expérience n'a pas déjà été évalué.
+      // Réutilise get-cycle-summary (déjà utilisé ailleurs), aucune
+      // nouvelle API. Ne bloque QUE si alreadyEvaluated est positivement
+      // vrai ; tout le reste (cycle actif, réseau en échec, absence de
+      // cycle) garde le comportement existant — on ne suppose jamais
+      // qu'un cycle est terminé sans confirmation explicite.
+      fetch('/api/get-cycle-summary?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
+        .then(function(r) { return r.json(); })
+        .then(function(cycleData) {
+          if (cycleData && cycleData.hasCycle && cycleData.alreadyEvaluated === true) {
+            // Cycle clos et déjà évalué : le point du jour de ce cycle ne
+            // doit plus être proposé. Le bloc "Ce cycle est terminé" de
+            // renderContextualBanner() porte déjà tout le contexte
+            // nécessaire — on masque simplement la carte, sans la
+            // remplacer par un second contenu.
+            pcCycleEvaluated = true;
+            var todayCardEl = document.getElementById('today-card');
+            if (todayCardEl) todayCardEl.style.display = 'none';
+            return;
+          }
+          pcCycleEvaluated = false;
+          pcMoteur = data.moteur;
+          pcContext = data.checkinContext;
+          pcAnswers = {};
+          pcRenderStep('signal');
+        })
+        .catch(function(e) {
+          // Échec réseau sur get-cycle-summary : on ne sait pas si le
+          // cycle est évalué, donc on ne suppose rien — comportement
+          // inchangé, le point du jour reste affiché normalement.
+          console.warn('checkPersonalizedCheckin (cycle) :', e);
+          pcCycleEvaluated = false;
+          pcMoteur = data.moteur;
+          pcContext = data.checkinContext;
+          pcAnswers = {};
+          pcRenderStep('signal');
+        });
     })
     .catch(function(e) { console.warn('checkPersonalizedCheckin :', e); });
 }
@@ -2258,6 +2299,14 @@ function pcSubmitJusteAvant() {
 }
 
 function pcSubmit(confirmDuplicate) {
+  // NOUVEAU (30/08/2026) — garde-fou : si le cycle est déjà évalué, aucun
+  // check-in ne doit être envoyé pour lui, même si cette fonction était
+  // atteinte via un état périmé (écran resté ouvert, double clic...).
+  // En usage normal, l'affichage bloque déjà ce chemin avant qu'il soit
+  // atteignable — ceci est une seconde protection, pas le mécanisme
+  // principal.
+  if (pcCycleEvaluated) return;
+
   var body = Object.assign({ code: code }, pcAnswers);
   if (confirmDuplicate) body.confirmDuplicate = true;
 
@@ -2405,6 +2454,16 @@ function renderContextualBanner() {
                   : '')
               + '<div style="font-size:13px;color:rgba(245,240,232,.55);margin-top:10px;font-style:italic">La prochaine étape reste à définir avec Franck.</div>'
               + '</div>';
+            // NOUVEAU (30/08/2026) — masque explicitement la carte du
+            // point du jour ici aussi. Nécessaire car cette fonction
+            // réinitialise today-card à visible en tout début d'exécution
+            // (voir todayCardElReset plus haut) ; sans ce masquage
+            // explicite, une exécution de renderContextualBanner() après
+            // celle de checkPersonalizedCheckin() réafficherait la carte
+            // que cette dernière venait de masquer — même pattern que la
+            // branche État A ci-dessus.
+            var todayCardElD = document.getElementById('today-card');
+            if (todayCardElD) todayCardElD.style.display = 'none';
             return;
           }
 
