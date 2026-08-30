@@ -497,6 +497,25 @@ canvas{width:100%;height:100%}
       Aucun système actif n'a encore été configuré pour toi. Parles-en à Franck avant de continuer.
     </div>
 
+    <!-- NOUVEAU (30/08/2026) — contexte du cycle précédent, affiché
+         uniquement pour la préparation d'un nouveau cycle (openCyclePrep),
+         jamais pour la toute première configuration d'une expérience. -->
+    <div id="quest-cycle-context" style="display:none;margin-bottom:20px">
+      <div class="score-block">
+        <div class="score-block-name" style="margin-bottom:10px">Ce que tu as testé jusqu'ici</div>
+        <div id="quest-cycle-context-nom" style="font-size:12px;color:var(--or);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px"></div>
+        <div id="quest-cycle-context-action" style="font-size:14px;color:var(--creme);line-height:1.5;margin-bottom:14px"></div>
+        <div id="quest-cycle-context-apprentissage-wrap" style="margin-bottom:10px">
+          <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">Ce que tu as appris</div>
+          <div id="quest-cycle-context-apprentissage" style="font-size:14px;color:var(--creme);line-height:1.5"></div>
+        </div>
+        <div id="quest-cycle-context-decision-wrap">
+          <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">Décision retenue</div>
+          <div id="quest-cycle-context-decision" style="font-size:14px;color:var(--creme);line-height:1.5"></div>
+        </div>
+      </div>
+    </div>
+
     <div id="quest-form" style="display:none">
       <div id="quest-blocks"></div>
 
@@ -1667,6 +1686,16 @@ var currentMoteur = null;
 var currentExperienceId = null;
 
 var pendingMoteur = null;
+// NOUVEAU (30/08/2026) — Modèle multi-cycle, Chantier 3.
+// true pendant la préparation d'un nouveau cycle pour une expérience déjà
+// verrouillée (bouton "Continuer cette expérience" depuis l'État D) — fait
+// que submitQuestionnaire() sache qu'il doit créer un cycle SANS passer par
+// create-experience, et relier les réponses au nouveau cycle.
+var preparingNextCycle = false;
+// true quand la nouvelle expérience à créer (choix moteur) doit, une fois
+// créée et liée avec succès, faire passer l'ancienne à 'Consolidé' — set
+// uniquement par le bouton "Changer d'expérience" depuis l'État D.
+var consoliderAncienneApresCreation = false;
 
 // NOUVEAU — le serveur (Airtable, via get-experience) est l'unique source de
 // vérité pour savoir ce que le client doit voir : aucun choix ni verrouillage
@@ -1753,7 +1782,12 @@ function confirmMoteurChoice() {
   fetch('/api/create-experience', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code: code, moteur: pendingMoteur, objectif: objectif }),
+    body: JSON.stringify({
+      code: code,
+      moteur: pendingMoteur,
+      objectif: objectif,
+      consoliderAncienne: consoliderAncienneApresCreation,
+    }),
   })
     .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
     .then(function(result) {
@@ -1764,6 +1798,19 @@ function confirmMoteurChoice() {
         err.style.display = 'block';
         return;
       }
+      // Ce chemin crée toujours une expérience neuve (cycle 1) — jamais un
+      // nouveau cycle d'une expérience existante, qui passe par
+      // openCyclePrep(). On repart donc sur un état propre.
+      preparingNextCycle = false;
+      document.getElementById('quest-cycle-context').style.display = 'none';
+      if (consoliderAncienneApresCreation && result.data.ancienneConsolideeAvecSucces === false) {
+        // La nouvelle expérience est bien active pour le client — mais
+        // l'ancienne n'a pas pu être marquée Consolidé. On ne bloque pas le
+        // parcours pour ça, mais Franck doit le savoir pour corriger
+        // manuellement dans Airtable si besoin.
+        console.warn("L'ancienne expérience n'a pas pu être consolidée automatiquement.");
+      }
+      consoliderAncienneApresCreation = false;
       currentMoteur = pendingMoteur;
       currentExperienceId = result.data.experienceId;
       // NOUVEAU (28/08/2026) — Le début du parcours 60 jours se déclenche
@@ -1812,6 +1859,78 @@ function renderQuestionnaire(moteur) {
   document.getElementById('quest-blocks').innerHTML = html;
 }
 
+// NOUVEAU (30/08/2026) — Modèle multi-cycle, Chantier 3.
+// Point d'entrée "Continuer cette expérience" depuis l'État D. Affiche le
+// contexte du cycle qui vient d'être clos (lecture seule) puis le même
+// questionnaire que d'habitude, mais en mode "nouveau cycle" : la
+// soumission passera par save-cycle SANS cycleId (création, numérotation
+// serveur) plutôt que par create-experience.
+function openCyclePrep() {
+  showScreen('s-questionnaire');
+  document.getElementById('quest-loading').style.display = 'block';
+  document.getElementById('quest-error').style.display = 'none';
+  document.getElementById('quest-cycle-context').style.display = 'none';
+  document.getElementById('quest-form').style.display = 'none';
+
+  fetch('/api/get-cycle-summary?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      document.getElementById('quest-loading').style.display = 'none';
+
+      if (!data.hasCycle) {
+        document.getElementById('quest-error').textContent = "Aucun cycle précédent trouvé. Préviens Franck.";
+        document.getElementById('quest-error').style.display = 'block';
+        return;
+      }
+
+      preparingNextCycle = true;
+      currentMoteur = data.moteur;
+
+      // Contexte en lecture seule du cycle qui vient de se terminer.
+      document.getElementById('quest-cycle-context-nom').textContent = data.nomCycle || 'Cycle précédent';
+      document.getElementById('quest-cycle-context-action').textContent = data.actionsPrevues || '—';
+      var apprentissageWrap = document.getElementById('quest-cycle-context-apprentissage-wrap');
+      var decisionWrap = document.getElementById('quest-cycle-context-decision-wrap');
+      if (data.bilan && data.bilan.apprentissage) {
+        document.getElementById('quest-cycle-context-apprentissage').textContent = data.bilan.apprentissage;
+        apprentissageWrap.style.display = 'block';
+      } else {
+        apprentissageWrap.style.display = 'none';
+      }
+      if (data.bilan && data.bilan.decisionSuivante) {
+        document.getElementById('quest-cycle-context-decision').textContent = data.bilan.decisionSuivante;
+        decisionWrap.style.display = 'block';
+      } else {
+        decisionWrap.style.display = 'none';
+      }
+      document.getElementById('quest-cycle-context').style.display = 'block';
+
+      renderQuestionnaire(data.moteur);
+      document.getElementById('quest-form').style.display = 'block';
+    })
+    .catch(function(e) {
+      document.getElementById('quest-loading').style.display = 'none';
+      document.getElementById('quest-error').textContent = "Erreur de chargement. Réessaie, ou préviens Franck.";
+      document.getElementById('quest-error').style.display = 'block';
+      console.warn('Erreur openCyclePrep :', e);
+    });
+}
+
+// NOUVEAU (30/08/2026) — Point d'entrée "Changer d'expérience" depuis
+// l'État D. Réutilise intégralement l'écran de choix moteur déjà existant
+// (s-moteur-choice / confirmMoteurChoice) — aucun nouveau système parallèle.
+// Seule différence : consoliderAncienneApresCreation est levé, pour que
+// confirmMoteurChoice() demande au serveur de consolider l'ancienne
+// expérience une fois la nouvelle créée et liée avec succès.
+function openChangeExperienceFlow() {
+  consoliderAncienneApresCreation = true;
+  preparingNextCycle = false;
+  pendingMoteur = null;
+  document.getElementById('moteur-cards').style.display = 'block';
+  document.getElementById('moteur-confirm').style.display = 'none';
+  showScreen('s-moteur-choice');
+}
+
 function submitQuestionnaire() {
   var questions = currentMoteur === 'ANCRAGE' ? QUESTIONS_ANCRAGE : QUESTIONS_RUPTURE;
   var ok = true;
@@ -1838,43 +1957,60 @@ function submitQuestionnaire() {
   btn.disabled = true;
   btn.textContent = 'Enregistrement...';
 
-  var savePromises = answers.map(function(a) {
-    return fetch('/api/save-configuration', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: code, etape: a.etape, question: a.question, reponse: a.reponse }),
-    });
-  });
+  // NOUVEAU (30/08/2026) — Modèle multi-cycle, Chantier 3 : ordre d'écriture
+  // inversé par rapport à avant. Le cycle est créé D'ABORD (sans cycleId,
+  // sans nomCycle/numeroCycle — le serveur calcule tout), et c'est
+  // seulement une fois son identifiant connu que les réponses de
+  // configuration sont enregistrées, reliées à ce cycle précis. Nécessaire
+  // pour qu'une expérience à plusieurs cycles distingue correctement les
+  // réponses de chacun (voir get-experience.js) — fonctionne à l'identique
+  // pour un premier cycle (preparingNextCycle=false) ou un cycle suivant
+  // (preparingNextCycle=true) : seule la présence d'une expérience déjà
+  // verrouillée change, jamais cette fonction elle-même.
+  var actionsPrevuesTexte = answers.map(function(a) {
+    return a.etape + ' : ' + a.reponse;
+  }).join('\n\n');
 
-  Promise.all(savePromises)
-    .then(function() {
-      var actionsPrevuesTexte = answers.map(function(a) {
-        return a.etape + ' : ' + a.reponse;
-      }).join('\n\n');
+  var dateDebut = new Date().toISOString().slice(0, 10);
+  var dateFinObj = new Date();
+  dateFinObj.setDate(dateFinObj.getDate() + 5);
+  var dateFin = dateFinObj.toISOString().slice(0, 10);
 
-      var dateDebut = new Date().toISOString().slice(0, 10);
-      var dateFinObj = new Date();
-      dateFinObj.setDate(dateFinObj.getDate() + 5);
-      var dateFin = dateFinObj.toISOString().slice(0, 10);
+  fetch('/api/save-cycle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      code: code,
+      dateDebut: dateDebut,
+      dateFin: dateFin,
+      actionsPrevues: actionsPrevuesTexte,
+    }),
+  })
+    .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+    .then(function(result) {
+      if (!result.ok || !result.data.cycleId) {
+        throw new Error(result.data && result.data.error ? result.data.error : 'Échec création du cycle');
+      }
+      var newCycleId = result.data.cycleId;
 
-      return fetch('/api/save-cycle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: code,
-          nomCycle: 'Cycle 1',
-          numeroCycle: 1,
-          dateDebut: dateDebut,
-          dateFin: dateFin,
-          actionsPrevues: actionsPrevuesTexte,
-        }),
-      }).then(function() { return answers; });
+      var savePromises = answers.map(function(a) {
+        return fetch('/api/save-configuration', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: code, etape: a.etape, question: a.question, reponse: a.reponse, cycleId: newCycleId }),
+        });
+      });
+
+      return Promise.all(savePromises).then(function() { return answers; });
     })
     .then(function(answers) {
-      // Le plan est maintenant verrouillé côté serveur (save-cycle passe le
-      // statut de l'expérience à "Test en cours"). On l'affiche directement
-      // ici pour un retour immédiat, mais la prochaine ouverture de cet
-      // écran relira toujours l'état réel depuis get-experience.
+      // Le plan est maintenant verrouillé côté serveur pour un premier
+      // cycle (save-cycle passe le statut de l'expérience à "Test en
+      // cours" — inchangé pour les cycles suivants, voir save-cycle.js).
+      // On l'affiche directement ici pour un retour immédiat, mais la
+      // prochaine ouverture de cet écran relira toujours l'état réel
+      // depuis get-experience.
+      preparingNextCycle = false;
       renderPlan(answers);
       showScreen('s-plan');
       btn.disabled = false;
@@ -2459,7 +2595,10 @@ function renderContextualBanner() {
               + (decision
                   ? '<div style="font-size:14px;color:rgba(245,240,232,.7);line-height:1.6;margin-top:6px">Décision retenue : <b style="color:var(--creme)">' + escapeHtml(decision) + '</b></div>'
                   : '')
-              + '<div style="font-size:13px;color:rgba(245,240,232,.55);margin-top:10px;font-style:italic">La prochaine étape reste à définir avec Franck.</div>'
+              + '<div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">'
+              + '<button class="btn-engage" style="margin-top:0;flex:1;min-width:200px" onclick="openCyclePrep()">Continuer cette expérience →</button>'
+              + '<button class="btn-ghost" style="flex:1;min-width:160px;padding:14px" onclick="openChangeExperienceFlow()">Changer d\'expérience</button>'
+              + '</div>'
               + '</div>';
             // (30/08/2026) — masque explicitement la carte du point du
             // jour, en complément du masquage déjà fait côté
