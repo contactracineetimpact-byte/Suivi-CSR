@@ -1289,6 +1289,20 @@ function escapeHtml(s) {
   });
 }
 
+// NOUVEAU (30/08/2026) — Chantier 6 : formatage humain d'une date ISO
+// (YYYY-MM-DD, telle que stockée dans Airtable) pour l'affichage client.
+// Ne modifie jamais la valeur stockée — uniquement sa présentation.
+function formatDateFr(isoDate) {
+  if (!isoDate) return '';
+  var parts = String(isoDate).split('-');
+  if (parts.length !== 3) return isoDate; // format inattendu : on n'invente rien, on affiche tel quel
+  var mois = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  var jour = parseInt(parts[2], 10);
+  var moisIdx = parseInt(parts[1], 10) - 1;
+  if (isNaN(jour) || isNaN(moisIdx) || moisIdx < 0 || moisIdx > 11) return isoDate;
+  return jour + ' ' + mois[moisIdx] + ' ' + parts[0];
+}
+
 // ── NAVIGATION ───────────────────────────────────────────
 function showNav(nav) {
   currentNav = nav;
@@ -2201,7 +2215,7 @@ function openBilan() {
       document.getElementById('bilan-summary').style.display = 'block';
       document.getElementById('bilan-summary-name').textContent = data.nomExperience || (data.moteur || '');
       var duree = '';
-      if (data.dateDebut && data.dateFin) duree = 'Du ' + data.dateDebut + ' au ' + data.dateFin + '.';
+      if (data.dateDebut && data.dateFin) duree = 'Du ' + formatDateFr(data.dateDebut) + ' au ' + formatDateFr(data.dateFin) + '.';
       document.getElementById('bilan-summary-details').textContent = duree || (data.nomCycle || '');
 
       if (data.alreadyEvaluated) {
@@ -2778,8 +2792,9 @@ function renderExperienceProgress() {
           // ── NIVEAU 1 — MAINTENANT ──────────────────────────────────
           html += '<div class="chart-card">';
           html += '<div class="chart-title">Maintenant</div>';
-          html += '<div class="score-block-name" style="margin-bottom:10px">'
-            + moteurLabel + (expData.nomExperience ? ' — ' + escapeHtml(expData.nomExperience) : '') + '</div>';
+          html += '<div class="score-block-name" style="margin-bottom:2px">'
+            + escapeHtml(expData.nomExperience || moteurLabel) + '</div>'
+            + '<div style="font-size:11px;color:var(--or);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">' + moteurLabel + '</div>';
           html += '<div style="margin-bottom:14px">'
             + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:4px">Mon objectif</div>'
             + '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(expData.objectif || '—') + '</div>'
@@ -2814,7 +2829,7 @@ function renderExperienceProgress() {
               html += (c.decisionSuivante ? '<span style="font-size:12px;color:rgba(245,240,232,.55)">' + escapeHtml(c.decisionSuivante) + '</span>' : (estActuel ? '<span style="font-size:12px;color:var(--or)">en cours</span>' : ''));
               html += '</div>';
               html += '<div id="progress-cycle-detail-' + i + '" style="display:none;margin-top:8px;padding-left:26px;font-size:13px;color:rgba(245,240,232,.7);line-height:1.6">';
-              if (c.dateDebut) html += '<div>Du ' + escapeHtml(c.dateDebut) + (c.dateFin ? ' au ' + escapeHtml(c.dateFin) : '') + '</div>';
+              if (c.dateDebut) html += '<div>Du ' + formatDateFr(c.dateDebut) + (c.dateFin ? ' au ' + formatDateFr(c.dateFin) : '') + '</div>';
               if (c.apprentissage) html += '<div style="margin-top:4px">' + escapeHtml(c.apprentissage) + '</div>';
               if (!c.apprentissage && !c.alreadyEvaluated) html += '<div style="font-style:italic;color:rgba(245,240,232,.45)">Pas encore de bilan pour ce cycle.</div>';
               html += '</div>';
