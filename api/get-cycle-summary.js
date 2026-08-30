@@ -5,6 +5,14 @@
 // afficher l'écran d'introduction du bilan de fin de cycle (nom de
 // l'expérience, moteur, durée, dates).
 //
+// MIS À JOUR (30/08/2026) — Chantier 5 (Progression 60 jours) : la réponse
+// inclut désormais aussi `cycles`, un résumé léger de TOUS les cycles de
+// l'expérience active (pas seulement le plus récent). Ces données étaient
+// déjà entièrement récupérées en mémoire (`matching`, ci-dessous) pour en
+// extraire le dernier — aucun appel Airtable supplémentaire. Purement
+// additif : aucun champ existant retiré ni modifié, la réponse reste
+// rétrocompatible avec l'écran de bilan qui consomme déjà cette route.
+//
 // Appel : GET /api/get-cycle-summary?code=TEST-FRANCK
 
 export default async function handler(req, res) {
@@ -70,6 +78,32 @@ export default async function handler(req, res) {
 
     matching.sort((a, b) => (b.fields['N° cycle'] || 0) - (a.fields['N° cycle'] || 0));
     const latest = matching[0];
+
+    // NOUVEAU (30/08/2026) — Résumé léger de tous les cycles, du plus
+    // ancien au plus récent (ordre naturel de lecture d'une timeline).
+    // Réutilise `matching`, déjà entièrement chargé ci-dessus.
+    function extractSelectNameLight(field) {
+      if (!field) return null;
+      if (typeof field === 'string') return field;
+      if (typeof field === 'object' && field.name) return field.name;
+      return null;
+    }
+    const cycles = matching
+      .slice()
+      .sort((a, b) => (a.fields['N° cycle'] || 0) - (b.fields['N° cycle'] || 0))
+      .map((c) => {
+        const decision = extractSelectNameLight(c.fields['Décision suivante']);
+        return {
+          cycleId: c.id,
+          nomCycle: c.fields['Nom du cycle'] || null,
+          numeroCycle: c.fields['N° cycle'] || null,
+          dateDebut: c.fields['Date début'] || null,
+          dateFin: c.fields['Date fin'] || null,
+          alreadyEvaluated: !!decision,
+          apprentissage: c.fields['Apprentissage'] || null,
+          decisionSuivante: decision,
+        };
+      });
 
     // Un cycle est considéré "déjà évalué" si le champ Décision suivante a
     // été rempli — c'est ce qui signe la fin du bilan.
@@ -155,6 +189,7 @@ export default async function handler(req, res) {
       nomExperience,
       experienceId: experienceRecordId,
       indicateur,
+      cycles,
       bilan: alreadyEvaluated
         ? {
             realiteObservee: latest.fields['Réalité observée'] || null,
