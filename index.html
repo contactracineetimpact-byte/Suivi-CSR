@@ -945,6 +945,26 @@ function renderHowto() {
   document.getElementById('howto-chevron').textContent = collapsed ? '▸' : '▾';
 }
 
+// NOUVEAU (30/08/2026) — Chantier 4B : point de contrôle unique pour la
+// visibilité des blocs legacy (.scores-mini + #howto-card) sur l'accueil.
+// Masqués uniquement si le client a une expérience ANCRAGE/RUPTURE ET n'a
+// jamais réellement utilisé le legacy (seances.length === 0, déjà le
+// signal existant réutilisé par renderScoresMini()/les badges — aucune
+// nouvelle donnée). Si le client a un historique de séances réel, les
+// blocs restent visibles, quel que soit l'état ANCRAGE/RUPTURE — on ne
+// cache jamais une vraie donnée. #scores-empty-hint est traité avec
+// .scores-mini (élément frère, pas enfant) pour éviter un texte orphelin
+// affiché seul quand le bloc principal est masqué.
+function updateLegacyVisibility(hasExperience) {
+  var showLegacy = !hasExperience || seances.length > 0;
+  var scoresEl = document.querySelector('.scores-mini');
+  var scoresHintEl = document.getElementById('scores-empty-hint');
+  var howtoEl = document.getElementById('howto-card');
+  if (scoresEl) scoresEl.style.display = showLegacy ? '' : 'none';
+  if (scoresHintEl && !showLegacy) scoresHintEl.style.display = 'none';
+  if (howtoEl) howtoEl.style.display = showLegacy ? '' : 'none';
+}
+
 function toggleHowto() {
   var stored = load('howto_collapsed_' + code);
   var collapsed = stored === null ? true : stored;
@@ -2553,6 +2573,11 @@ function renderContextualBanner() {
   fetch('/api/get-experience?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
     .then(function(r) { return r.json(); })
     .then(function(expData) {
+      // NOUVEAU (30/08/2026) — Chantier 4B : point de contrôle unique de
+      // la visibilité du legacy, appelé une seule fois ici (hasExperience
+      // ne varie pas selon la branche A/B/C/D ci-dessous).
+      updateLegacyVisibility(expData.hasExperience);
+
       if (!expData.hasExperience) {
         // État A — aucune expérience active.
         el.style.display = 'block';
