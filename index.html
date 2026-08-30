@@ -2808,7 +2808,7 @@ function renderExperienceProgress() {
             + '</div>';
           html += '<div style="font-size:13px;color:rgba(245,240,232,.65);margin-bottom:10px">'
             + cycles.length + ' cycle' + (cycles.length > 1 ? 's' : '') + ' réalisé' + (cycles.length > 1 ? 's' : '')
-            + (statutLabel && statutLabel !== 'Test en cours' ? ' · Statut : ' + escapeHtml(statutLabel) : '')
+            + (statutLabel && statutLabel !== 'Test en cours' && enCours === false ? ' · Statut : ' + escapeHtml(statutLabel) : '')
             + '</div>';
           if (enCours) {
             html += '<div>'
