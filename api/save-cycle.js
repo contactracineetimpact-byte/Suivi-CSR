@@ -210,12 +210,37 @@ export default async function handler(req, res) {
     // l'expérience liée en pause. C'est la SEULE des six décisions qui
     // déclenche un changement de statut automatique — toutes les autres
     // n'ont aucun effet ici, conformément au modèle validé.
+    //
+    // MIS À JOUR (30/08/2026) — Cette écriture est critique pour la
+    // traçabilité comportementale : le cycle peut être enregistré avec
+    // succès (bilan, décision) alors que le statut de l'expérience échoue
+    // à se mettre à jour (ex. option de statut manquante côté Airtable).
+    // On ne doit jamais répondre "success" sans distinguer ce cas — le
+    // résultat de ce PATCH est donc explicitement vérifié et remonté dans
+    // la réponse, jamais avalé silencieusement par un .catch().
+    let statutExperienceMiseAJour = { tentee: false, succes: null, erreur: null };
+
     if (existingCycleId && decisionSuivante === 'Suspendre') {
-      await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}/${experienceRecordId}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ fields: { Statut: 'En pause' } }),
-      }).catch((e) => console.error('Échec passage en pause de l\'expérience:', e));
+      statutExperienceMiseAJour.tentee = true;
+      try {
+        const statutRes = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}/${experienceRecordId}`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ fields: { Statut: 'En pause' } }),
+        });
+        if (statutRes.ok) {
+          statutExperienceMiseAJour.succes = true;
+        } else {
+          const statutErrText = await statutRes.text();
+          console.error('Échec passage en pause de l\'expérience:', statutErrText);
+          statutExperienceMiseAJour.succes = false;
+          statutExperienceMiseAJour.erreur = statutErrText;
+        }
+      } catch (e) {
+        console.error('Erreur réseau passage en pause de l\'expérience:', e);
+        statutExperienceMiseAJour.succes = false;
+        statutExperienceMiseAJour.erreur = String(e);
+      }
     }
 
     return res.status(200).json({
@@ -224,6 +249,7 @@ export default async function handler(req, res) {
       cycleId: existingCycleId || opData.id,
       numeroCycle: numeroCycleCalcule,
       nomCycle: nomCycleCalcule,
+      statutExperienceMiseAJour,
     });
   } catch (err) {
     console.error('Erreur save-cycle:', err);
