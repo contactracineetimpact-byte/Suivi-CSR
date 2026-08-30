@@ -99,6 +99,7 @@ export default async function handler(req, res) {
           numeroCycle: c.fields['N° cycle'] || null,
           dateDebut: c.fields['Date début'] || null,
           dateFin: c.fields['Date fin'] || null,
+          actionsPrevues: c.fields['Actions prévues'] || null,
           alreadyEvaluated: !!decision,
           apprentissage: c.fields['Apprentissage'] || null,
           decisionSuivante: decision,
@@ -132,10 +133,27 @@ export default async function handler(req, res) {
     );
 
     let indicateur = null;
+    let citations = [];
+    // NOUVEAU (30/08/2026) — Chantier 7 : nombre brut d'observations
+    // enregistrées pour ce cycle, distinct de "signaux identifiés"
+    // (indicateur.total, qui filtre déjà sur Signal='Oui'). Donnée déjà
+    // en mémoire (cycleCheckins), aucun appel supplémentaire.
+    const totalObservations = cycleCheckins.length;
     if (cycleCheckins.length > 0) {
       const opportunites = cycleCheckins.filter(
         (r) => extractSelectName(r.fields['Signal émotionnel apparu']) === 'Oui'
       );
+
+      // NOUVEAU (30/08/2026) — Chantier 7 : citations réelles du client
+      // ("Ce qui s'est passé juste avant"), issues du même cycleCheckins
+      // déjà chargé ci-dessus pour l'indicateur — aucun appel Airtable
+      // supplémentaire. Mots du client tels quels, jamais reformulés ;
+      // maximum 2, les plus récentes, uniquement si non vides.
+      citations = cycleCheckins
+        .filter((r) => r.fields['Ce qui s\'est passé juste avant'] && r.fields['Ce qui s\'est passé juste avant'].trim())
+        .sort((a, b) => new Date(b.fields['Horodatage'] || 0) - new Date(a.fields['Horodatage'] || 0))
+        .slice(0, 2)
+        .map((r) => r.fields['Ce qui s\'est passé juste avant'].trim());
 
       // NOUVEAU (28/08/2026) — Seuil de prudence statistique. Aucun seuil
       // méthodologiquement défini n'existait ailleurs dans le code ; celui-ci
@@ -189,6 +207,8 @@ export default async function handler(req, res) {
       nomExperience,
       experienceId: experienceRecordId,
       indicateur,
+      citations,
+      totalObservations,
       cycles,
       bilan: alreadyEvaluated
         ? {
