@@ -13,8 +13,25 @@
 // lien 'Expérience active' du client est remplacé, et seulement après
 // confirmation que la nouvelle expérience a bien été créée.
 //
-// Corps attendu (POST) : { code, moteur, objectif }
+// MIS À JOUR (30/08/2026) — Modèle multi-cycle, Chantier 3 : ajout du
+// paramètre optionnel consoliderAncienne. Quand le client déclenche
+// explicitement "Changer d'expérience" depuis l'État D (cycle terminé et
+// déjà évalué), l'ancienne expérience peut encore être 'Test en cours' —
+// aucune décision de bilan autre que 'Suspendre' ne change son statut
+// automatiquement. Ce paramètre autorise donc un contournement CIBLÉ et
+// VÉRIFIÉ de la liste blanche : on ne l'accepte que si on confirme
+// soi-même, côté serveur, que le cycle le plus récent de l'ancienne
+// expérience est réellement évalué (Décision suivante renseignée) — jamais
+// sur la seule foi de ce que le client prétend. Si la vérification échoue,
+// refus normal. Si elle réussit : création + liaison comme d'habitude, puis
+// — et seulement après liaison confirmée réussie — l'ancienne expérience
+// passe à 'Consolidé'. Jamais l'inverse (consolider avant de savoir si la
+// création réussit), pour ne jamais clôturer une expérience pour rien si la
+// nouvelle création échoue.
+//
+// Corps attendu (POST) : { code, moteur, objectif, consoliderAncienne }
 // moteur doit être exactement "ANCRAGE" ou "RUPTURE".
+// consoliderAncienne : booléen optionnel, false par défaut.
 
 const STATUTS_PERMETTANT_NOUVELLE_EXPERIENCE = ['En pause', 'Consolidé', 'Abandonné'];
 
@@ -31,7 +48,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { code, moteur, objectif } = req.body;
+    const { code, moteur, objectif, consoliderAncienne } = req.body;
 
     if (!code || typeof code !== 'string') {
       return res.status(400).json({ error: 'Code manquant' });
@@ -44,6 +61,7 @@ export default async function handler(req, res) {
     const AIRTABLE_BASE = process.env.AIRTABLE_BASE || 'app9uUXCxNdjb0m9X';
     const TABLE_CLIENTS = 'SuiviCSR_Clients';
     const TABLE_EXPERIENCES = 'CSR_Expériences';
+    const TABLE_CYCLES = 'CSR_Cycles';
 
     const headers = {
       Authorization: `Bearer ${AIRTABLE_TOKEN}`,
@@ -69,9 +87,11 @@ export default async function handler(req, res) {
     //    reconnu refusent — jamais l'inverse (pas de liste noire), pour que
     //    tout cas non prévu reste bloquant par défaut.
     const existingLinks = clientRecord.fields['Expérience active'];
+    let existingExperienceId = null;
+    let doitConsoliderApresLiaison = false;
 
     if (existingLinks && existingLinks.length > 0) {
-      const existingExperienceId = existingLinks[0];
+      existingExperienceId = existingLinks[0];
       const existingExpUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}/${existingExperienceId}`;
       const existingExpRes = await fetch(existingExpUrl, { headers });
 
@@ -86,24 +106,51 @@ export default async function handler(req, res) {
       const existingStatut = extractSelectName(existingExpData.fields['Statut']);
 
       if (!STATUTS_PERMETTANT_NOUVELLE_EXPERIENCE.includes(existingStatut)) {
-        if (existingStatut === 'Configuration' || existingStatut === 'Test en cours') {
+        // NOUVEAU (30/08/2026) — Contournement ciblé pour "Changer
+        // d'expérience" depuis l'État D : vérifié, jamais supposé.
+        let bypassAutorise = false;
+        if (consoliderAncienne === true) {
+          const cyclesUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}?pageSize=100`;
+          const cyclesRes = await fetch(cyclesUrl, { headers });
+          const cyclesData = await cyclesRes.json();
+          const matchingCycles = (cyclesData.records || []).filter(
+            (r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(existingExperienceId)
+          );
+          if (matchingCycles.length > 0) {
+            matchingCycles.sort((a, b) => (b.fields['N° cycle'] || 0) - (a.fields['N° cycle'] || 0));
+            const latestCycle = matchingCycles[0];
+            const decisionName = extractSelectName(latestCycle.fields['Décision suivante']);
+            if (!!decisionName) {
+              bypassAutorise = true;
+              doitConsoliderApresLiaison = true;
+            }
+          }
+        }
+
+        if (!bypassAutorise) {
+          if (existingStatut === 'Configuration' || existingStatut === 'Test en cours') {
+            return res.status(409).json({
+              error: "Une expérience est déjà active pour ce client. Termine ou mets en pause l'expérience actuelle avant d'en créer une nouvelle.",
+            });
+          }
+          if (existingStatut === 'Changé de moteur') {
+            return res.status(409).json({
+              error: 'Cette expérience ne permet pas encore de créer une nouvelle expérience depuis cet état.',
+            });
+          }
+          // Statut absent, vide, ou toute valeur non reconnue.
           return res.status(409).json({
-            error: "Une expérience est déjà active pour ce client. Termine ou mets en pause l'expérience actuelle avant d'en créer une nouvelle.",
+            error: "Impossible de créer une nouvelle expérience : le statut de l'expérience actuelle n'est pas reconnu.",
           });
         }
-        if (existingStatut === 'Changé de moteur') {
-          return res.status(409).json({
-            error: 'Cette expérience ne permet pas encore de créer une nouvelle expérience depuis cet état.',
-          });
-        }
-        // Statut absent, vide, ou toute valeur non reconnue.
-        return res.status(409).json({
-          error: "Impossible de créer une nouvelle expérience : le statut de l'expérience actuelle n'est pas reconnu.",
-        });
+        // bypassAutorise === true : le cycle le plus récent de l'ancienne
+        // expérience est confirmé évalué — on poursuit, l'ancienne sera
+        // consolidée après liaison réussie (jamais avant).
       }
-      // Statut autorisé : on poursuit. L'ancienne expérience (existingExperienceId)
-      // n'est touchée nulle part dans ce qui suit — ni son statut, ni ses
-      // champs, ni ses cycles.
+      // Statut autorisé (whitelist normale, ou bypass vérifié ci-dessus) :
+      // on poursuit. L'ancienne expérience n'est touchée nulle part dans ce
+      // qui suit avant l'étape 5 — ni son statut, ni ses champs, ni ses
+      // cycles.
     }
 
     const prenom = clientRecord.fields['Prenom'] || clientRecord.fields['Prénom'] || code;
@@ -158,7 +205,8 @@ export default async function handler(req, res) {
       // succès à l'étape 3), mais la liaison au client a échoué. On ne
       // prétend jamais que tout a réussi dans ce cas — on expose l'ID de
       // l'expérience orpheline pour que le problème reste traçable plutôt
-      // que silencieux.
+      // que silencieux. L'ancienne expérience n'est PAS consolidée dans ce
+      // cas — la liaison n'ayant pas réussi, rien ne doit être clôturé.
       const errText = await updateClientRes.text();
       console.error('Échec liaison client -> expérience:', errText);
       return res.status(207).json({
@@ -170,7 +218,36 @@ export default async function handler(req, res) {
       });
     }
 
-    return res.status(200).json({ success: true, experienceId: experienceRecordId, moteur: moteur });
+    // 5. Consolidation de l'ancienne expérience — uniquement si demandée ET
+    //    vérifiée à l'étape 2, ET seulement maintenant que la création ET la
+    //    liaison ont toutes deux réussi. Un échec ici est signalé
+    //    explicitement plutôt qu'avalé : la nouvelle expérience est bel et
+    //    bien active pour le client, mais l'ancienne resterait alors dans un
+    //    statut non consolidé jusqu'à correction manuelle.
+    let ancienneConsolideeAvecSucces = null;
+    if (doitConsoliderApresLiaison && existingExperienceId) {
+      const consolideRes = await fetch(
+        `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}/${existingExperienceId}`,
+        {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ fields: { Statut: 'Consolidé' } }),
+        }
+      );
+      ancienneConsolideeAvecSucces = consolideRes.ok;
+      if (!consolideRes.ok) {
+        const errText = await consolideRes.text();
+        console.error('Échec consolidation ancienne expérience:', errText);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      experienceId: experienceRecordId,
+      moteur: moteur,
+      ancienneExperienceId: existingExperienceId,
+      ancienneConsolideeAvecSucces: ancienneConsolideeAvecSucces,
+    });
   } catch (err) {
     console.error('Erreur create-experience:', err);
     return res.status(500).json({ error: 'Erreur serveur' });
