@@ -5,13 +5,22 @@
 // pattern que kv-set.js (token Airtable côté serveur, recherche par Code),
 // mais résout d'abord l'expérience active du client avant d'écrire.
 //
+// MIS À JOUR (30/08/2026) — Modèle multi-cycle, Chantier 3 : accepte un
+// cycleId optionnel. S'il est fourni, la réponse est aussi reliée au cycle
+// concerné (champ 'Cycle' sur CSR_Configuration) — nécessaire pour que
+// get-experience.js puisse distinguer les réponses d'un cycle de celles
+// d'un autre au sein de la même expérience. Si absent, comportement
+// strictement identique à avant (aucune écriture sur le champ 'Cycle') —
+// rétrocompatible avec les anciennes réponses du cycle 1 qui n'en ont pas.
+//
 // Corps attendu (POST) :
-//   { code, etape, question, reponse, sousQuestionRenfort }
+//   { code, etape, question, reponse, sousQuestionRenfort, cycleId }
 //   - code                 : le code client (ex. "TEST-FRANCK")
 //   - etape                : ex. "A — Ambition", "R — Un frein"
 //   - question              : texte de la question posée
 //   - reponse               : texte de la réponse du client
 //   - sousQuestionRenfort   : booléen, optionnel (identité/déclaration/symbole)
+//   - cycleId               : optionnel, ID du cycle CSR_Cycles concerné
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -19,7 +28,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { code, etape, question, reponse, sousQuestionRenfort } = req.body;
+    const { code, etape, question, reponse, sousQuestionRenfort, cycleId } = req.body;
 
     if (!code || typeof code !== 'string') {
       return res.status(400).json({ error: 'Code manquant' });
@@ -32,6 +41,7 @@ export default async function handler(req, res) {
     const AIRTABLE_BASE = process.env.AIRTABLE_BASE || 'app9uUXCxNdjb0m9X';
     const TABLE_CLIENTS = 'SuiviCSR_Clients';
     const TABLE_CONFIG = 'CSR_Configuration';
+    const TABLE_CYCLES = 'CSR_Cycles';
 
     const headers = {
       Authorization: `Bearer ${AIRTABLE_TOKEN}`,
@@ -59,22 +69,42 @@ export default async function handler(req, res) {
 
     const experienceRecordId = experienceLinks[0];
 
+    // 1bis. Si un cycleId est fourni, vérifier qu'il appartient bien à
+    //       l'expérience active du client — même garde-fou que save-cycle.js,
+    //       pour ne jamais relier une réponse au cycle d'un autre client ou
+    //       d'une autre expérience par erreur ou par ID deviné.
+    if (cycleId) {
+      const checkUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}/${cycleId}`;
+      const checkRes = await fetch(checkUrl, { headers });
+      if (!checkRes.ok) {
+        return res.status(400).json({ error: 'Cycle introuvable.' });
+      }
+      const checkData = await checkRes.json();
+      const cycleExpLinks = checkData.fields['Expérience'];
+      if (!Array.isArray(cycleExpLinks) || !cycleExpLinks.includes(experienceRecordId)) {
+        return res.status(403).json({ error: "Ce cycle n'appartient pas à l'expérience active de ce client." });
+      }
+    }
+
     // 2. Créer la ligne de réponse dans CSR_Configuration.
+    const fields = {
+      Étape: etape,
+      Expérience: [experienceRecordId],
+      Question: question,
+      Réponse: reponse,
+      'Sous-question renfort': !!sousQuestionRenfort,
+      Date: new Date().toISOString().slice(0, 10),
+    };
+    if (cycleId) {
+      fields['Cycle'] = [cycleId];
+    }
+
     const createRes = await fetch(
       `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CONFIG}`,
       {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          fields: {
-            Étape: etape,
-            Expérience: [experienceRecordId],
-            Question: question,
-            Réponse: reponse,
-            'Sous-question renfort': !!sousQuestionRenfort,
-            Date: new Date().toISOString().slice(0, 10),
-          },
-        }),
+        body: JSON.stringify({ fields }),
       }
     );
 
