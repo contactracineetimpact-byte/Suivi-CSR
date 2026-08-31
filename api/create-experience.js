@@ -115,7 +115,7 @@ export default async function handler(req, res) {
           // l'explication complète. existingExpData est déjà récupéré par
           // ID juste au-dessus ; sa liste de cycles liés n'est jamais
           // tronquée, quelle que soit la taille globale de CSR_Cycles.
-          const cyclesIds = (existingExpData.fields['CSR_Cycles'] || []).map((l) => l.id);
+          const cyclesIds = existingExpData.fields['CSR_Cycles'] || [];
           // MIS À JOUR (30/08/2026) — Chantier 12, corrigé le jour même : la
           // première version utilisait filterByFormula=OR(RECORD_ID()=...),
           // qui s'est révélée ne pas fonctionner en production. Remplacé par
