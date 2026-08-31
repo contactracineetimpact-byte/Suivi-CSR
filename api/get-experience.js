@@ -102,14 +102,14 @@ export default async function handler(req, res) {
         return results.filter(Boolean);
       }
 
-      const cycleIds = (expData.fields['CSR_Cycles'] || []).map((l) => l.id);
+      const cycleIds = expData.fields['CSR_Cycles'] || [];
       const matchingCycles = await fetchByIds('CSR_Cycles', cycleIds);
       if (matchingCycles.length > 0) {
         matchingCycles.sort((a, b) => (b.fields['N° cycle'] || 0) - (a.fields['N° cycle'] || 0));
         currentCycleId = matchingCycles[0].id;
       }
 
-      const configIds = (expData.fields['CSR_Configuration'] || []).map((l) => l.id);
+      const configIds = expData.fields['CSR_Configuration'] || [];
       const allAnswersForExperience = await fetchByIds('CSR_Configuration', configIds);
       {
 
@@ -174,11 +174,6 @@ export default async function handler(req, res) {
       currentCycleId: currentCycleId,
       planAnswers: planAnswers,
       checkinContext: checkinContext,
-      // DEBUG TEMPORAIRE (30/08/2026) — Chantier 12, à retirer dès que le
-      // diagnostic est terminé. Liste les clés réellement présentes sur
-      // expData.fields, pour vérifier si 'CSR_Cycles'/'CSR_Configuration'
-      // sont bien les noms exacts renvoyés par l'API Airtable.
-      _debugFieldKeys: Object.keys(expData.fields || {}),
     });
   } catch (err) {
     console.error('Erreur get-experience:', err);
