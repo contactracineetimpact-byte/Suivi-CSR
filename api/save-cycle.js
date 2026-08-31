@@ -124,12 +124,36 @@ export default async function handler(req, res) {
     let isFirstCycleOfExperience = false;
 
     if (!existingCycleId) {
-      const existingCyclesUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}?pageSize=100`;
-      const existingCyclesRes = await fetch(existingCyclesUrl, { headers });
-      const existingCyclesData = await existingCyclesRes.json();
-      const cyclesDeCetteExperience = (existingCyclesData.records || []).filter(
-        (r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(experienceRecordId)
-      );
+      // MIS À JOUR (30/08/2026) — Chantier 12 : élimine le risque de
+      // troncature au-delà de 100 lignes sur cette logique critique (un
+      // mauvais calcul de numérotation pourrait écraser un cycle
+      // existant). On lit la liste des cycles liés directement sur
+      // l'enregistrement de l'expérience (jamais tronquée, quelle que
+      // soit la taille globale de CSR_Cycles), puis on récupère
+      // précisément ces enregistrements par leur ID — voir
+      // get-experience.js pour l'explication complète de la technique.
+      const TABLE_EXPERIENCES = 'CSR_Expériences';
+      const expUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}/${experienceRecordId}`;
+      const expRes = await fetch(expUrl, { headers });
+      const expData = await expRes.json();
+      const cyclesIds = (expData.fields && expData.fields['CSR_Cycles']) ? expData.fields['CSR_Cycles'].map((l) => l.id) : [];
+
+      // MIS À JOUR (30/08/2026) — Chantier 12, corrigé le jour même : la
+      // première version utilisait filterByFormula=OR(RECORD_ID()=...),
+      // qui s'est révélée ne pas fonctionner en production. Remplacé par
+      // une récupération individuelle de chaque cycle par son URL directe
+      // — voir get-experience.js pour l'explication complète. Particulièrement
+      // important ici : une liste de cycles incomplète casserait le calcul
+      // du prochain numéro.
+      const cyclesDeCetteExperience = (
+        await Promise.all(
+          cyclesIds.map(async (id) => {
+            const r = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}/${id}`, { headers });
+            if (!r.ok) return null;
+            return r.json();
+          })
+        )
+      ).filter(Boolean);
       const maxNumero = cyclesDeCetteExperience.reduce(
         (max, r) => Math.max(max, r.fields['N° cycle'] || 0),
         0
