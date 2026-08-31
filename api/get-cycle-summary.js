@@ -61,12 +61,25 @@ export default async function handler(req, res) {
     const moteur = typeof moteurField === 'string' ? moteurField : moteurField && moteurField.name;
     const nomExperience = expData.fields['Nom expérience'] || null;
 
+    // MIS À JOUR (30/08/2026) — Chantier 12 : élimine le risque de
+    // troncature au-delà de 100 lignes. Voir get-experience.js pour
+    // l'explication complète — même technique, même raison : lecture des
+    // listes de liens déjà présentes sur expData (jamais tronquées, quelle
+    // que soit la taille de la table), puis récupération ciblée par
+    // RECORD_ID() plutôt qu'un ARRAYJOIN peu fiable sur un champ lié.
+    async function fetchByIds(table, ids) {
+      if (!ids || ids.length === 0) return [];
+      const formula = 'OR(' + ids.map((id) => `RECORD_ID()='${id}'`).join(',') + ')';
+      const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${table}?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
+      const r = await fetch(url, { headers });
+      const d = await r.json();
+      return d.records || [];
+    }
+
     // Cherche les cycles liés à cette expérience, garde le plus récent
-    // (le plus grand "N° cycle" — pas de tri natif nécessaire côté Airtable
-    // pour un si petit volume par client).
-    const cyclesUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}?pageSize=100`;
-    const cyclesRes = await fetch(cyclesUrl, { headers });
-    const cyclesData = await cyclesRes.json();
+    // (le plus grand "N° cycle").
+    const cyclesIds = (expData.fields['CSR_Cycles'] || []).map((l) => l.id);
+    const cyclesData = { records: await fetchByIds('CSR_Cycles', cyclesIds) };
 
     const matching = (cyclesData.records || []).filter(
       (r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(experienceRecordId)
@@ -126,13 +139,8 @@ export default async function handler(req, res) {
         const premierCycleId = cycles[0].cycleId;
         const dernierCycleId = cycles[cycles.length - 1].cycleId;
 
-        const TABLE_CONFIG = 'CSR_Configuration';
-        const configUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CONFIG}?pageSize=100`;
-        const configRes = await fetch(configUrl, { headers });
-        const configData = await configRes.json();
-        const configRecords = (configData.records || []).filter(
-          (r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(experienceRecordId)
-        );
+        const configIdsForEvo = (expData.fields['CSR_Configuration'] || []).map((l) => l.id);
+        const configRecords = await fetchByIds('CSR_Configuration', configIdsForEvo);
 
         const findReponse = (etape, cycleId) => {
           const rec = configRecords.find(
@@ -185,10 +193,8 @@ export default async function handler(req, res) {
     // des vraies données de CSR_Checkins pour CE cycle précis. Le client n'a
     // jamais à faire ce calcul lui-même. Si aucun point du jour n'existe
     // encore pour ce cycle, l'indicateur reste absent plutôt que simulé.
-    const TABLE_CHECKINS = 'CSR_Checkins';
-    const checkinsUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CHECKINS}?pageSize=100`;
-    const checkinsRes = await fetch(checkinsUrl, { headers });
-    const checkinsData = await checkinsRes.json();
+    const checkinsIds = (expData.fields['CSR_Checkins'] || []).map((l) => l.id);
+    const checkinsData = { records: await fetchByIds('CSR_Checkins', checkinsIds) };
     const cycleCheckins = (checkinsData.records || []).filter(
       (r) => Array.isArray(r.fields['Cycle']) && r.fields['Cycle'].includes(latest.id)
     );
