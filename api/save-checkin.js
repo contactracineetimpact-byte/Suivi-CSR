@@ -73,13 +73,21 @@ export default async function handler(req, res) {
     // l'explication complète de la technique (listes de liens déjà
     // présentes sur expData, jamais tronquées, puis récupération ciblée
     // par RECORD_ID()).
+    // MIS À JOUR (30/08/2026) — Chantier 12, corrigé le jour même : la
+    // première version utilisait filterByFormula=OR(RECORD_ID()=...), qui
+    // s'est révélée ne pas fonctionner en production. Remplacé par une
+    // récupération individuelle de chaque enregistrement par son URL
+    // directe — voir get-experience.js pour l'explication complète.
     async function fetchByIds(table, ids) {
       if (!ids || ids.length === 0) return [];
-      const formula = 'OR(' + ids.map((id) => `RECORD_ID()='${id}'`).join(',') + ')';
-      const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${table}?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
-      const r = await fetch(url, { headers });
-      const d = await r.json();
-      return d.records || [];
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          const r = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${table}/${id}`, { headers });
+          if (!r.ok) return null;
+          return r.json();
+        })
+      );
+      return results.filter(Boolean);
     }
 
     // 2. Résoudre le cycle en cours (le plus récent de cette expérience).
