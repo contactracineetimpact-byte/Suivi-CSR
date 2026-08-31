@@ -1666,6 +1666,13 @@ function buildAndDownloadParcours(expData, cycleData) {
     if (expData.objectif) html += '<div class="parcours-intro"><b>Objectif :</b> ' + escapeHtml(expData.objectif) + '</div>';
     html += '<div class="parcours-intro"><b>Moteur :</b> ' + moteurLabel + '</div>';
     if (signalTexte) html += '<div class="parcours-intro"><b>Signal travaillé :</b> ' + escapeHtml(signalTexte) + '</div>';
+    // NOUVEAU (31/08/2026) — Chantier 13 : statut factuel, uniquement
+    // lorsqu'il a une vraie signification pour le lecteur (En pause /
+    // Consolidé) — jamais pour un statut technique actif ("Test en
+    // cours", "Configuration"), qui n'apporte rien au document.
+    if (expData.statut === 'En pause' || expData.statut === 'Consolidé') {
+      html += '<div class="parcours-intro"><b>Statut au moment de l\'export :</b> ' + escapeHtml(expData.statut) + '</div>';
+    }
     html += '</div>';
 
     // ── 2. MES EXPÉRIMENTATIONS ─────────────────────────────────
@@ -1681,6 +1688,19 @@ function buildAndDownloadParcours(expData, cycleData) {
         if (c.alreadyEvaluated && c.decisionSuivante) html += '<div class="s-just"><b>Ma décision :</b> ' + escapeHtml(c.decisionSuivante) + '</div>';
         html += '</div>';
       });
+    }
+
+    // ── 3. MA TRAJECTOIRE DE DÉCISIONS ──────────────────────────
+    // NOUVEAU (31/08/2026) — Chantier 13. Construite exclusivement à
+    // partir de cycles[].decisionSuivante, dans l'ordre chronologique déjà
+    // garanti par get-cycle-summary.js. Cycles sans décision ignorés
+    // (jamais de trou ni de "—" inventé). Aucune interprétation : la
+    // séquence brute des décisions réelles, rien de plus.
+    var decisionsSeq = cycles.filter(function(c) { return c.decisionSuivante; }).map(function(c) { return c.decisionSuivante; });
+    if (decisionsSeq.length > 0) {
+      html += '<div class="section-title">Ma trajectoire de décisions</div>';
+      html += '<div class="seance-block"><div class="parcours-intro" style="font-size:15px;font-weight:bold;color:#16276B">'
+        + decisionsSeq.map(escapeHtml).join(' → ') + '</div></div>';
     }
 
     // ── 3. CE QUI A CHANGÉ ──────────────────────────────────────
@@ -1713,6 +1733,17 @@ function buildAndDownloadParcours(expData, cycleData) {
       html += '<div class="preuve-item">' + preuves.cycles + ' cycle' + (preuves.cycles !== 1 ? 's' : '') + '</div>';
       if (preuves.decisions > 0) html += '<div class="preuve-item">' + preuves.decisions + ' décision' + (preuves.decisions !== 1 ? 's' : '') + '</div>';
       html += '</div>';
+      // NOUVEAU (31/08/2026) — Chantier 13 : citations réelles, mot pour
+      // mot, jamais résumées ni reformulées — les mêmes déjà calculées
+      // pour Progression, simplement reliées ici. Rien si vide.
+      var citations = cycleData.citations || [];
+      if (citations.length > 0) {
+        html += '<div style="margin-top:14px"><div class="evo-label" style="margin-bottom:6px">Moments observés</div>';
+        citations.forEach(function(cit) {
+          html += '<div class="s-just">« ' + escapeHtml(cit) + ' »</div>';
+        });
+        html += '</div>';
+      }
     }
   }
 
