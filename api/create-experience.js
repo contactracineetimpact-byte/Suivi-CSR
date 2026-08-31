@@ -116,14 +116,20 @@ export default async function handler(req, res) {
           // ID juste au-dessus ; sa liste de cycles liés n'est jamais
           // tronquée, quelle que soit la taille globale de CSR_Cycles.
           const cyclesIds = (existingExpData.fields['CSR_Cycles'] || []).map((l) => l.id);
-          let matchingCycles = [];
-          if (cyclesIds.length > 0) {
-            const formula = 'OR(' + cyclesIds.map((id) => `RECORD_ID()='${id}'`).join(',') + ')';
-            const cyclesUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
-            const cyclesRes = await fetch(cyclesUrl, { headers });
-            const cyclesData = await cyclesRes.json();
-            matchingCycles = cyclesData.records || [];
-          }
+          // MIS À JOUR (30/08/2026) — Chantier 12, corrigé le jour même : la
+          // première version utilisait filterByFormula=OR(RECORD_ID()=...),
+          // qui s'est révélée ne pas fonctionner en production. Remplacé par
+          // une récupération individuelle par URL directe — voir
+          // get-experience.js pour l'explication complète.
+          const matchingCycles = (
+            await Promise.all(
+              cyclesIds.map(async (id) => {
+                const r = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}/${id}`, { headers });
+                if (!r.ok) return null;
+                return r.json();
+              })
+            )
+          ).filter(Boolean);
           if (matchingCycles.length > 0) {
             matchingCycles.sort((a, b) => (b.fields['N° cycle'] || 0) - (a.fields['N° cycle'] || 0));
             const latestCycle = matchingCycles[0];
