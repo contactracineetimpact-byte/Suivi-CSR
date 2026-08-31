@@ -136,7 +136,7 @@ export default async function handler(req, res) {
       const expUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}/${experienceRecordId}`;
       const expRes = await fetch(expUrl, { headers });
       const expData = await expRes.json();
-      const cyclesIds = (expData.fields && expData.fields['CSR_Cycles']) ? expData.fields['CSR_Cycles'].map((l) => l.id) : [];
+      const cyclesIds = (expData.fields && expData.fields['CSR_Cycles']) ? expData.fields['CSR_Cycles'] : [];
 
       // MIS À JOUR (30/08/2026) — Chantier 12, corrigé le jour même : la
       // première version utilisait filterByFormula=OR(RECORD_ID()=...),
