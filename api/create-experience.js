@@ -110,12 +110,20 @@ export default async function handler(req, res) {
         // d'expérience" depuis l'État D : vérifié, jamais supposé.
         let bypassAutorise = false;
         if (consoliderAncienne === true) {
-          const cyclesUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}?pageSize=100`;
-          const cyclesRes = await fetch(cyclesUrl, { headers });
-          const cyclesData = await cyclesRes.json();
-          const matchingCycles = (cyclesData.records || []).filter(
-            (r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(existingExperienceId)
-          );
+          // MIS À JOUR (30/08/2026) — Chantier 12 : élimine le risque de
+          // troncature au-delà de 100 lignes — voir get-experience.js pour
+          // l'explication complète. existingExpData est déjà récupéré par
+          // ID juste au-dessus ; sa liste de cycles liés n'est jamais
+          // tronquée, quelle que soit la taille globale de CSR_Cycles.
+          const cyclesIds = (existingExpData.fields['CSR_Cycles'] || []).map((l) => l.id);
+          let matchingCycles = [];
+          if (cyclesIds.length > 0) {
+            const formula = 'OR(' + cyclesIds.map((id) => `RECORD_ID()='${id}'`).join(',') + ')';
+            const cyclesUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
+            const cyclesRes = await fetch(cyclesUrl, { headers });
+            const cyclesData = await cyclesRes.json();
+            matchingCycles = cyclesData.records || [];
+          }
           if (matchingCycles.length > 0) {
             matchingCycles.sort((a, b) => (b.fields['N° cycle'] || 0) - (a.fields['N° cycle'] || 0));
             const latestCycle = matchingCycles[0];
