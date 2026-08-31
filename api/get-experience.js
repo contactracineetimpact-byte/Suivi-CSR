@@ -81,18 +81,25 @@ export default async function handler(req, res) {
       // puis de filtrer côté serveur, on lit directement les listes de
       // liens déjà présentes sur l'enregistrement expData (récupéré par
       // ID juste au-dessus) — un champ d'enregistrement individuel n'est
-      // jamais tronqué, quelle que soit la taille de la table. On ne
-      // récupère ensuite QUE les enregistrements réellement liés à cette
-      // expérience, via leurs ID exacts (RECORD_ID(), fiable — un
-      // filterByFormula basé sur ARRAYJOIN d'un champ lié ne fonctionnerait
-      // pas correctement : il compare des noms affichés, pas des ID).
+      // jamais tronqué, quelle que soit la taille de la table. On récupère
+      // ensuite chaque enregistrement lié individuellement, par son URL
+      // directe (.../TABLE/id) — le même mécanisme déjà prouvé fiable
+      // partout ailleurs dans ce fichier (client, expérience). Une première
+      // version utilisait filterByFormula=OR(RECORD_ID()=...), qui s'est
+      // révélée ne pas fonctionner en production (testé en conditions
+      // réelles) — abandonnée au profit de cette approche plus simple et
+      // sans ambiguïté. Listes toujours petites par client : le coût des
+      // requêtes individuelles en parallèle est négligeable.
       async function fetchByIds(table, ids) {
         if (!ids || ids.length === 0) return [];
-        const formula = 'OR(' + ids.map((id) => `RECORD_ID()='${id}'`).join(',') + ')';
-        const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${table}?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
-        const r = await fetch(url, { headers });
-        const d = await r.json();
-        return d.records || [];
+        const results = await Promise.all(
+          ids.map(async (id) => {
+            const r = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${table}/${id}`, { headers });
+            if (!r.ok) return null;
+            return r.json();
+          })
+        );
+        return results.filter(Boolean);
       }
 
       const cycleIds = (expData.fields['CSR_Cycles'] || []).map((l) => l.id);
