@@ -75,30 +75,36 @@ export default async function handler(req, res) {
     let checkinContext = null;
     let currentCycleId = null;
     if (isLocked) {
-      // Détermine le cycle courant (le plus récent) pour pouvoir y scoper
-      // les réponses de configuration — même logique de tri que
-      // get-cycle-summary.js et save-cycle.js, pour une seule définition
-      // cohérente de "cycle le plus récent" dans toute l'application.
-      const TABLE_CYCLES = 'CSR_Cycles';
-      const cyclesUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CYCLES}?pageSize=100`;
-      const cyclesRes = await fetch(cyclesUrl, { headers });
-      const cyclesData = await cyclesRes.json();
-      const matchingCycles = (cyclesData.records || []).filter(
-        (r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(experienceRecordId)
-      );
+      // MIS À JOUR (30/08/2026) — Chantier 12 : élimine le risque de
+      // troncature au-delà de 100 lignes. Au lieu de récupérer la table
+      // entière (CSR_Cycles / CSR_Configuration, tous clients confondus)
+      // puis de filtrer côté serveur, on lit directement les listes de
+      // liens déjà présentes sur l'enregistrement expData (récupéré par
+      // ID juste au-dessus) — un champ d'enregistrement individuel n'est
+      // jamais tronqué, quelle que soit la taille de la table. On ne
+      // récupère ensuite QUE les enregistrements réellement liés à cette
+      // expérience, via leurs ID exacts (RECORD_ID(), fiable — un
+      // filterByFormula basé sur ARRAYJOIN d'un champ lié ne fonctionnerait
+      // pas correctement : il compare des noms affichés, pas des ID).
+      async function fetchByIds(table, ids) {
+        if (!ids || ids.length === 0) return [];
+        const formula = 'OR(' + ids.map((id) => `RECORD_ID()='${id}'`).join(',') + ')';
+        const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${table}?filterByFormula=${encodeURIComponent(formula)}&pageSize=100`;
+        const r = await fetch(url, { headers });
+        const d = await r.json();
+        return d.records || [];
+      }
+
+      const cycleIds = (expData.fields['CSR_Cycles'] || []).map((l) => l.id);
+      const matchingCycles = await fetchByIds('CSR_Cycles', cycleIds);
       if (matchingCycles.length > 0) {
         matchingCycles.sort((a, b) => (b.fields['N° cycle'] || 0) - (a.fields['N° cycle'] || 0));
         currentCycleId = matchingCycles[0].id;
       }
 
-      const TABLE_CONFIG = 'CSR_Configuration';
-      const configUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CONFIG}?pageSize=100`;
-      const configRes = await fetch(configUrl, { headers });
-      const configData = await configRes.json();
-      if (configData.records) {
-        const allAnswersForExperience = configData.records.filter(
-          (r) => Array.isArray(r.fields['Expérience']) && r.fields['Expérience'].includes(experienceRecordId)
-        );
+      const configIds = (expData.fields['CSR_Configuration'] || []).map((l) => l.id);
+      const allAnswersForExperience = await fetchByIds('CSR_Configuration', configIds);
+      {
 
         // Disambiguation : si AU MOINS UNE réponse de cette expérience porte
         // déjà un lien 'Cycle', on suppose que la migration vers le modèle
