@@ -174,6 +174,11 @@ export default async function handler(req, res) {
       currentCycleId: currentCycleId,
       planAnswers: planAnswers,
       checkinContext: checkinContext,
+      // DEBUG TEMPORAIRE (30/08/2026) — Chantier 12, à retirer dès que le
+      // diagnostic est terminé. Liste les clés réellement présentes sur
+      // expData.fields, pour vérifier si 'CSR_Cycles'/'CSR_Configuration'
+      // sont bien les noms exacts renvoyés par l'API Airtable.
+      _debugFieldKeys: Object.keys(expData.fields || {}),
     });
   } catch (err) {
     console.error('Erreur get-experience:', err);
