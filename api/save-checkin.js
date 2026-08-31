@@ -91,7 +91,7 @@ export default async function handler(req, res) {
     }
 
     // 2. Résoudre le cycle en cours (le plus récent de cette expérience).
-    const cyclesIds = (expData.fields['CSR_Cycles'] || []).map((l) => l.id);
+    const cyclesIds = expData.fields['CSR_Cycles'] || [];
     const matchingCycles = await fetchByIds('CSR_Cycles', cyclesIds);
     if (matchingCycles.length === 0) {
       return res.status(409).json({ error: "Aucun cycle en cours pour cette expérience." });
@@ -104,7 +104,7 @@ export default async function handler(req, res) {
     //    vouloir en ajouter une seconde, on prévient plutôt que d'écrire.
     const todayStr = new Date().toISOString().slice(0, 10);
     if (!confirmDuplicate) {
-      const checkinsIds = (expData.fields['CSR_Checkins'] || []).map((l) => l.id);
+      const checkinsIds = expData.fields['CSR_Checkins'] || [];
       const checkinsData = { records: await fetchByIds('CSR_Checkins', checkinsIds) };
       const todayEntries = (checkinsData.records || []).filter((r) => {
         const links = r.fields['Expérience'];
