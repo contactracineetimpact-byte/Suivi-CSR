@@ -200,12 +200,12 @@ canvas{width:100%;height:100%}
     </div>
 
     <div class="routine-card hub-card" onclick="showNav('home')" style="cursor:pointer;transition:all .2s">
-      <div style="font-size:20px;font-weight:700;color:#C9A84C;font-family:'Cormorant Garamond',serif;margin-bottom:4px">Suivi</div>
+      <div style="font-size:20px;font-weight:700;color:#C9A84C;font-family:'Cormorant Garamond',serif;margin-bottom:4px">Aujourd'hui</div>
       <div style="font-size:13px;color:rgba(245,240,232,.6)">Coche ce que tu as fait aujourd'hui</div>
     </div>
 
     <div class="routine-card hub-card" onclick="openQuestionnaire()" style="cursor:pointer;transition:all .2s">
-      <div style="font-size:20px;font-weight:700;color:#C9A84C;font-family:'Cormorant Garamond',serif;margin-bottom:4px">Mon système</div>
+      <div style="font-size:20px;font-weight:700;color:#C9A84C;font-family:'Cormorant Garamond',serif;margin-bottom:4px">Mon plan</div>
       <div style="font-size:13px;color:rgba(245,240,232,.6)">Configurer ou revoir ton plan ANCRAGE ou RUPTURE</div>
     </div>
 
@@ -215,7 +215,7 @@ canvas{width:100%;height:100%}
     </div>
 
     <div class="routine-card hub-card" onclick="showNav('tableau')" style="cursor:pointer;transition:all .2s">
-      <div style="font-size:20px;font-weight:700;color:#C9A84C;font-family:'Cormorant Garamond',serif;margin-bottom:4px">Progression</div>
+      <div style="font-size:20px;font-weight:700;color:#C9A84C;font-family:'Cormorant Garamond',serif;margin-bottom:4px">Mon parcours</div>
       <div style="font-size:13px;color:rgba(245,240,232,.6)">Voir ta progression</div>
     </div>
 
@@ -245,21 +245,49 @@ canvas{width:100%;height:100%}
          Alimentée par renderContextualBanner(), sans nouvelle donnée ni API. -->
     <div id="contextual-banner" style="display:none;margin-bottom:16px"></div>
 
-    <!-- NOUVEAU (30/08/2026) — Chantier 9 : "Tes preuves", visible
-         directement sur l'accueil sans clic supplémentaire vers le hub.
-         Rempli par renderHubBadges() (même fonction que le hub, données
-         cumulées sur l'expérience active). Masqué si non pertinent. -->
-    <div id="home-preuves" style="display:none;background:rgba(245,240,232,.04);border:1px solid rgba(245,240,232,.1);border-radius:8px;padding:14px 16px;margin-bottom:16px"></div>
-
-    <!-- NOUVEAU (31/08/2026) — Chantier 17 : aperçu de "Mon miroir" depuis
-         l'accueil, pour que la preuve de transformation ne reste pas
-         cachée dans Progression. Rempli par renderHubBadges() (même fetch
-         déjà en place, aucun appel supplémentaire). Masqué si aucune
-         évolution réelle n'existe. -->
-    <div id="home-miroir" style="display:none;background:rgba(245,240,232,.04);border:1px solid rgba(245,240,232,.1);border-radius:8px;padding:14px 16px;margin-bottom:16px"></div>
-
     <!-- Rappel jour manqué -->
     <div id="missed-day-banner" style="display:none;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.35);border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:#D9BC66;line-height:1.5"></div>
+
+    <!-- AUJOURD'HUI — expérience unifiée -->
+    <!-- NOUVEAU (30/08/2026) — masquée par défaut pour éviter le flash du
+         contenu legacy au premier affichage : renderToday() écrit son
+         contenu en synchrone avant que l'état réel du client soit connu.
+         La logique existante (renderContextualBanner / checkPersonalizedCheckin)
+         se charge déjà de révéler ou garder masquée cette carte une fois
+         l'état résolu — rien d'autre n'a changé.
+         MIS À JOUR (01/09/2026) — Chantier 18 : remontée juste après la
+         bannière, avant tout le reste — c'est l'action du moment, elle ne
+         doit jamais être précédée par des blocs secondaires. -->
+    <div class="routine-card" id="today-card" style="display:none">
+
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+        <div class="routine-title" style="margin-bottom:0" id="today-title">Aujourd'hui</div>
+        <div id="today-date" style="font-size:11px;color:rgba(245,240,232,.55)"></div>
+      </div>
+      <div style="font-size:12px;color:rgba(245,240,232,.55);margin-bottom:18px" id="today-sub">Coche au fur et à mesure, puis valide ta journée.</div>
+      <div id="today-list"></div>
+      <button class="btn-engage" id="btn-validate-today" onclick="validateToday()" style="margin-top:14px">VALIDER MA JOURNÉE →</button>
+      <div id="today-validated-note" style="display:none;font-size:12px;color:#C9A84C;text-align:center;margin-top:10px">✓ Journée validée — tu peux encore la modifier si besoin.</div>
+    </div>
+
+    <!-- NOUVEAU (01/09/2026) — Chantier 18 : navigation secondaire, en
+         retrait, sous l'action du jour — jamais au même niveau visuel. -->
+    <div style="display:flex;gap:16px;justify-content:center;margin:18px 0;font-size:12px;color:rgba(245,240,232,.55)">
+      <span style="cursor:pointer" onclick="showNav('tableau')">Mon parcours</span>
+      <span style="cursor:pointer" onclick="showNav('seance')">Ma séance</span>
+      <span style="cursor:pointer" onclick="openQuestionnaire()">Mon plan</span>
+    </div>
+
+    <!-- NOUVEAU (30/08/2026, Chantier 9) + (31/08/2026, Chantier 17) — "Tes
+         preuves" et l'aperçu de "Mon miroir", regroupés dans UN seul bloc
+         visuel secondaire (Chantier 18) plutôt que deux cartes distinctes
+         du même poids que l'action principale. Remplis par
+         renderHubBadges() (même fetch déjà en place). Le conteneur reste
+         masqué tant qu'aucun des deux n'a de contenu réel. -->
+    <div id="home-secondaire" style="display:none;background:rgba(245,240,232,.04);border:1px solid rgba(245,240,232,.1);border-radius:8px;padding:14px 16px;margin-bottom:16px">
+      <div id="home-preuves"></div>
+      <div id="home-miroir"></div>
+    </div>
 
     <!-- Scores mini -->
     <div class="scores-mini">
@@ -287,7 +315,7 @@ canvas{width:100%;height:100%}
     <!-- Guide d'utilisation -->
     <div id="howto-card" style="background:#12172E;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:16px;margin-bottom:16px;cursor:pointer" onclick="toggleHowto()">
       <div style="display:flex;justify-content:space-between;align-items:center" id="howto-header">
-        <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#C9A84C">❔ Comment utiliser ton suivi</div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#C9A84C">❔ Comment ça marche</div>
         <span id="howto-chevron" style="color:#C9A84C;font-size:12px">▾</span>
       </div>
       <div id="howto-body" style="font-size:13px;line-height:1.7;color:#D9D6CC;margin-top:10px">
@@ -297,37 +325,18 @@ canvas{width:100%;height:100%}
       </div>
     </div>
 
-    <!-- AUJOURD'HUI — expérience unifiée -->
-    <!-- NOUVEAU (30/08/2026) — masquée par défaut pour éviter le flash du
-         contenu legacy au premier affichage : renderToday() écrit son
-         contenu en synchrone avant que l'état réel du client soit connu.
-         La logique existante (renderContextualBanner / checkPersonalizedCheckin)
-         se charge déjà de révéler ou garder masquée cette carte une fois
-         l'état résolu — rien d'autre n'a changé. -->
-    <div class="routine-card" id="today-card" style="display:none">
-
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
-        <div class="routine-title" style="margin-bottom:0" id="today-title">Aujourd'hui</div>
-        <div id="today-date" style="font-size:11px;color:rgba(245,240,232,.55)"></div>
-      </div>
-      <div style="font-size:12px;color:rgba(245,240,232,.55);margin-bottom:18px" id="today-sub">Coche au fur et à mesure, puis valide ta journée.</div>
-      <div id="today-list"></div>
-      <button class="btn-engage" id="btn-validate-today" onclick="validateToday()" style="margin-top:14px">VALIDER MA JOURNÉE →</button>
-      <div id="today-validated-note" style="display:none;font-size:12px;color:#C9A84C;text-align:center;margin-top:10px">✓ Journée validée — tu peux encore la modifier si besoin.</div>
-    </div>
-
   </div>
 
   <!-- Nav bas -->
   <nav class="nav-bottom" style="position:fixed;bottom:0;left:0;right:0">
     <button class="nav-btn active" id="nav-home" onclick="showNav('home')">
-      <span class="nav-icon">●</span><span class="nav-label">Suivi</span>
+      <span class="nav-icon">●</span><span class="nav-label">Aujourd'hui</span>
     </button>
     <button class="nav-btn" id="nav-seance" onclick="showNav('seance')">
       <span class="nav-icon">●</span><span class="nav-label">Séance</span>
     </button>
     <button class="nav-btn" id="nav-tableau" onclick="showNav('tableau')">
-      <span class="nav-icon">●</span><span class="nav-label">Progression</span>
+      <span class="nav-icon">●</span><span class="nav-label">Mon parcours</span>
     </button>
   </nav>
 </div>
@@ -419,13 +428,13 @@ canvas{width:100%;height:100%}
 
   <nav class="nav-bottom" style="position:fixed;bottom:0;left:0;right:0">
     <button class="nav-btn" id="nav-home2" onclick="showNav('home')">
-      <span class="nav-icon">●</span><span class="nav-label">Suivi</span>
+      <span class="nav-icon">●</span><span class="nav-label">Aujourd'hui</span>
     </button>
     <button class="nav-btn active" id="nav-seance2" onclick="showNav('seance')">
       <span class="nav-icon">●</span><span class="nav-label">Séance</span>
     </button>
     <button class="nav-btn" id="nav-tableau2" onclick="showNav('tableau')">
-      <span class="nav-icon">●</span><span class="nav-label">Progression</span>
+      <span class="nav-icon">●</span><span class="nav-label">Mon parcours</span>
     </button>
   </nav>
 </div>
@@ -690,7 +699,7 @@ canvas{width:100%;height:100%}
   <div class="tableau-wrap">
     <div class="top-bar" style="margin-bottom:20px">
       <div>
-        <div class="page-title">Mon tableau</div>
+        <div class="page-title">Mon parcours</div>
         <div class="page-sub" id="tableau-meta"></div>
       </div>
       <div style="display:flex;gap:8px">
@@ -733,13 +742,13 @@ canvas{width:100%;height:100%}
 
   <nav class="nav-bottom" style="position:fixed;bottom:0;left:0;right:0">
     <button class="nav-btn" id="nav-home3" onclick="showNav('home')">
-      <span class="nav-icon">●</span><span class="nav-label">Suivi</span>
+      <span class="nav-icon">●</span><span class="nav-label">Aujourd'hui</span>
     </button>
     <button class="nav-btn" id="nav-seance3" onclick="showNav('seance')">
       <span class="nav-icon">●</span><span class="nav-label">Séance</span>
     </button>
     <button class="nav-btn active" id="nav-tableau3" onclick="showNav('tableau')">
-      <span class="nav-icon">●</span><span class="nav-label">Progression</span>
+      <span class="nav-icon">●</span><span class="nav-label">Mon parcours</span>
     </button>
   </nav>
 </div>
@@ -878,12 +887,14 @@ function renderHubTimeline() {
   if (!start) { el.style.display = 'none'; return; }
   var startDate = new Date(start);
   var today = new Date();
-  var dayNum = Math.floor((today - startDate) / 86400000) + 1;
-  dayNum = Math.max(1, Math.min(dayNum, 60));
-  var pct = Math.round((dayNum / 60) * 100);
-  document.getElementById('hub-timeline-label').textContent = 'Jour ' + dayNum + ' / 60';
-  document.getElementById('hub-timeline-pct').textContent = pct + '%';
-  document.getElementById('hub-timeline-bar').style.width = pct + '%';
+  var dayNum = Math.max(1, Math.floor((today - startDate) / 86400000) + 1);
+  // MIS À JOUR (01/09/2026) — Chantier 18 : SuiviCSR fonctionne désormais
+  // par cycles itératifs, pas par un programme linéaire de 60 jours — la
+  // barre de progression et le pourcentage /60 sont retirés, ne restent
+  // qu'un simple repère temporel.
+  document.getElementById('hub-timeline-label').textContent = dayNum + (dayNum > 1 ? ' jours' : ' jour') + ' depuis le début de ton parcours';
+  document.getElementById('hub-timeline-pct').textContent = '';
+  document.getElementById('hub-timeline-bar').style.width = '0%';
   el.style.display = 'block';
 }
 
@@ -899,9 +910,11 @@ function renderHubBadges() {
   var elHub = document.getElementById('hub-badges');
   var elHome = document.getElementById('home-preuves');
   var elMiroir = document.getElementById('home-miroir');
+  var elSecondaire = document.getElementById('home-secondaire');
   if (elHub) elHub.style.display = 'none';
-  if (elHome) elHome.style.display = 'none';
-  if (elMiroir) elMiroir.style.display = 'none';
+  if (elHome) { elHome.innerHTML = ''; }
+  if (elMiroir) { elMiroir.innerHTML = ''; }
+  if (elSecondaire) elSecondaire.style.display = 'none';
 
   fetch('/api/get-experience?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
     .then(function(r) { return r.json(); })
@@ -922,37 +935,52 @@ function renderHubBadges() {
             var evolutions = cycleData && cycleData.evolutions || [];
             var evoAPrevisualiser = evolutions.find(function(ev) { return ev.label === 'action'; }) || evolutions.find(function(ev) { return ev.label === 'objectif'; });
             if (evoAPrevisualiser) {
-              var htmlMiroir = '<div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--or);margin-bottom:8px">Un regard sur ton parcours</div>'
+              elMiroir.innerHTML = '<div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--or);margin-bottom:8px">Un regard sur ton parcours</div>'
                 + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(245,240,232,.5);margin-bottom:2px">Au départ</div>'
                 + '<div style="font-size:13px;color:var(--creme);line-height:1.5;margin-bottom:6px">« ' + escapeHtml(evoAPrevisualiser.premiereReponse) + ' »</div>'
                 + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(245,240,232,.5);margin-bottom:2px">Aujourd\'hui</div>'
                 + '<div style="font-size:13px;color:var(--creme);line-height:1.5;margin-bottom:10px">« ' + escapeHtml(evoAPrevisualiser.derniereReponse) + ' »</div>'
                 + '<div style="font-size:12px;color:var(--or);cursor:pointer" onclick="showNav(\'tableau\')">→ Voir mon parcours</div>';
-              elMiroir.innerHTML = htmlMiroir;
-              elMiroir.style.display = 'block';
             }
           }
 
           var preuves = cycleData && cycleData.preuves;
-          if (!preuves) return;
+          if (preuves) {
+            var items = [];
+            items.push(preuves.observations + ' observation' + (preuves.observations !== 1 ? 's' : ''));
+            if (preuves.labelSecondaire === 'signal identifié') {
+              items.push(preuves.compteurSecondaire + ' ' + (preuves.compteurSecondaire !== 1 ? 'signaux' : 'signal') + ' identifié' + (preuves.compteurSecondaire !== 1 ? 's' : ''));
+            } else if (preuves.labelSecondaire === 'interception réussie') {
+              items.push(preuves.compteurSecondaire + ' interception' + (preuves.compteurSecondaire !== 1 ? 's' : '') + ' réussie' + (preuves.compteurSecondaire !== 1 ? 's' : ''));
+            }
+            items.push(preuves.cycles + ' cycle' + (preuves.cycles !== 1 ? 's' : ''));
+            if (preuves.decisions > 0) {
+              items.push(preuves.decisions + ' décision' + (preuves.decisions !== 1 ? 's' : ''));
+            }
 
-          var items = [];
-          items.push(preuves.observations + ' observation' + (preuves.observations !== 1 ? 's' : ''));
-          if (preuves.labelSecondaire === 'signal identifié') {
-            items.push(preuves.compteurSecondaire + ' ' + (preuves.compteurSecondaire !== 1 ? 'signaux' : 'signal') + ' identifié' + (preuves.compteurSecondaire !== 1 ? 's' : ''));
-          } else if (preuves.labelSecondaire === 'interception réussie') {
-            items.push(preuves.compteurSecondaire + ' interception' + (preuves.compteurSecondaire !== 1 ? 's' : '') + ' réussie' + (preuves.compteurSecondaire !== 1 ? 's' : ''));
+            var htmlPreuves = '<div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--or);margin-bottom:6px">Tes preuves</div>'
+              + '<div style="font-size:13px;color:var(--creme)">' + items.join(' · ') + '</div>';
+
+            if (elHub) { elHub.innerHTML = htmlPreuves; elHub.style.display = 'block'; }
+            if (elHome) { elHome.innerHTML = htmlPreuves; }
           }
-          items.push(preuves.cycles + ' cycle' + (preuves.cycles !== 1 ? 's' : ''));
-          if (preuves.decisions > 0) {
-            items.push(preuves.decisions + ' décision' + (preuves.decisions !== 1 ? 's' : ''));
+
+          // NOUVEAU (01/09/2026) — Chantier 18 : "Tes preuves" et "Mon
+          // miroir" partagent désormais un seul conteneur visuel
+          // (#home-secondaire), révélé uniquement si l'un des deux a
+          // réellement du contenu — jamais un bloc vide. Un séparateur
+          // n'est ajouté qu'entre les deux quand ils sont présents
+          // ensemble.
+          if (elSecondaire) {
+            var aPreuves = elHome && elHome.innerHTML;
+            var aMiroir = elMiroir && elMiroir.innerHTML;
+            if (aPreuves && aMiroir) {
+              elMiroir.style.cssText = 'margin-top:14px;padding-top:14px;border-top:1px solid rgba(245,240,232,.1)';
+            } else {
+              elMiroir.style.cssText = '';
+            }
+            if (aPreuves || aMiroir) elSecondaire.style.display = 'block';
           }
-
-          var html = '<div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--or);margin-bottom:6px">Tes preuves</div>'
-            + '<div style="font-size:13px;color:var(--creme)">' + items.join(' · ') + '</div>';
-
-          if (elHub) { elHub.innerHTML = html; elHub.style.display = 'block'; }
-          if (elHome) { elHome.innerHTML = html; elHome.style.display = 'block'; }
         });
     })
     .catch(function(e) { console.warn('renderHubBadges (preuves) :', e); });
@@ -3026,6 +3054,23 @@ function renderContextualBanner() {
       // ne varie pas selon la branche A/B/C/D ci-dessous).
       updateLegacyVisibility(expData.hasExperience);
 
+      // NOUVEAU (01/09/2026) — Chantier 18 : le sous-titre d'accueil
+      // ("0 séance enregistrée") est un résidu legacy sans signification
+      // pour un client ANCRAGE/RUPTURE. Remplacé par un repère temporel
+      // simple (sans référence à 60 jours, SuiviCSR étant désormais
+      // itératif par cycles) — uniquement quand une expérience existe.
+      // Sans expérience active, le texte legacy reste affiché tel quel :
+      // il garde un sens réel pour un client qui n'utilise que l'ancien
+      // parcours AO/AI/CE.
+      var metaEl = document.getElementById('home-meta');
+      if (metaEl && expData.hasExperience) {
+        var startProg = load('program_start_' + code);
+        if (startProg) {
+          var dayNumMeta = Math.max(1, Math.floor((new Date() - new Date(startProg)) / 86400000) + 1);
+          metaEl.textContent = dayNumMeta + (dayNumMeta > 1 ? ' jours' : ' jour') + ' depuis le début de ton parcours';
+        }
+      }
+
       if (!expData.hasExperience) {
         // État A — aucune expérience active.
         el.style.display = 'block';
@@ -3167,7 +3212,8 @@ function renderContextualBanner() {
 
           el.innerHTML =
             '<div class="action-card">'
-            + '<div class="action-eyebrow">Ton expérience du moment · ' + moteurLabel + (jourTexte ? ' · ' + jourTexte : '') + '</div>'
+            + '<div class="action-eyebrow">' + moteurLabel + (jourTexte ? ' · ' + jourTexte : '') + '</div>'
+            + (expData.objectif ? '<div style="font-size:11px;color:rgba(245,240,232,.5);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Tu travailles actuellement sur :</div>' : '')
             + '<div class="action-question" style="font-size:19px">' + escapeHtml(expData.objectif || 'Ton objectif en cours') + '</div>'
             + (actionTexte ? '<div style="font-size:13px;color:rgba(245,240,232,.6);margin-top:6px;font-style:italic">Tu testes : ' + escapeHtml(actionTexte) + '</div>' : '')
             + '</div>';
@@ -3398,8 +3444,8 @@ function renderExperienceProgress() {
           if (start) {
             var startDate = new Date(start);
             var today = new Date();
-            var dayNum = Math.max(1, Math.min(Math.floor((today - startDate) / 86400000) + 1, 60));
-            html += '<div style="font-size:12px;color:rgba(245,240,232,.4);text-align:center;margin-top:-6px">Jour ' + dayNum + ' / 60</div>';
+            var dayNum = Math.max(1, Math.floor((today - startDate) / 86400000) + 1);
+            html += '<div style="font-size:12px;color:rgba(245,240,232,.4);text-align:center;margin-top:-6px">' + dayNum + (dayNum > 1 ? ' jours' : ' jour') + ' depuis le début de ton parcours</div>';
           }
 
           el.innerHTML = html;
