@@ -3311,6 +3311,31 @@ function renderExperienceProgress() {
             html += '</div>';
           }
 
+          // ── MOMENTS & AJUSTEMENTS ───────────────────────────────────
+          // NOUVEAU (31/08/2026) — Chantier 16. Juxtapose un moment réel
+          // (citation + date + cycle) avec l'ajustement testé au cycle
+          // suivant — sans jamais écrire de lien de causalité. Si aucune
+          // action suivante n'existe (dernier cycle), seule la citation
+          // est affichée. Jamais d'association fabriquée.
+          var moments = cycleData.moments || [];
+          if (moments.length > 0) {
+            html += '<div class="chart-card">';
+            html += '<div class="chart-title">Moments & ajustements</div>';
+            html += '<div style="font-size:12px;color:rgba(245,240,232,.5);margin-bottom:14px">Des moments réels de ton parcours et ce que tu as testé ensuite.</div>';
+            moments.forEach(function(m, i) {
+              html += '<div style="' + (i < moments.length - 1 ? 'margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(245,240,232,.1)' : '') + '">';
+              html += '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(245,240,232,.5);margin-bottom:2px">' + escapeHtml(m.cycleLabel || 'Cycle') + ' — moment observé' + (m.date ? ' · ' + formatDateFr(m.date) : '') + '</div>';
+              html += '<div style="font-size:14px;color:var(--creme);line-height:1.5;margin-bottom:' + (m.ajustementAction ? '10px' : '0') + '">« ' + escapeHtml(m.citation) + ' »</div>';
+              if (m.ajustementAction) {
+                html += '<div style="text-align:center;color:var(--or);font-size:14px;opacity:.7">↓</div>';
+                html += '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin:6px 0 2px">' + escapeHtml(m.ajustementCycleLabel || 'Cycle suivant') + ' — ajustement</div>';
+                html += '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(m.ajustementAction) + '</div>';
+              }
+              html += '</div>';
+            });
+            html += '</div>';
+          }
+
           // ── NIVEAU 3 — MES PREUVES ─────────────────────────────────
           // Uniquement des faits comptés, jamais un score ou un
           // pourcentage de "réussite" fabriqué. Le ratio n'apparaît que
