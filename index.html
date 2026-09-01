@@ -251,10 +251,6 @@ canvas{width:100%;height:100%}
          cumulées sur l'expérience active). Masqué si non pertinent. -->
     <div id="home-preuves" style="display:none;background:rgba(245,240,232,.04);border:1px solid rgba(245,240,232,.1);border-radius:8px;padding:14px 16px;margin-bottom:16px"></div>
 
-    <!-- DEBUG TEMPORAIRE (31/08/2026) — Chantier 14. À retirer une fois la
-         cause de l'actualisation intermittente de l'État D identifiée. -->
-    <div id="debug-refresh-trace" style="font-size:10px;color:rgba(245,240,232,.25);text-align:center;margin-top:6px"></div>
-
     <!-- Rappel jour manqué -->
     <div id="missed-day-banner" style="display:none;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.35);border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:#D9BC66;line-height:1.5"></div>
 
@@ -3045,15 +3041,6 @@ function renderContextualBanner() {
         .then(function(r) { return r.json(); })
         .then(function(cycleData) {
           el.style.display = 'block';
-
-          // DEBUG TEMPORAIRE (31/08/2026) — Chantier 14.
-          var dbgEl = document.getElementById('debug-refresh-trace');
-          if (dbgEl) {
-            dbgEl.textContent = 'Diagnostic : ' + new Date().toLocaleTimeString('fr-FR')
-              + ' · evaluated=' + (cycleData && cycleData.alreadyEvaluated)
-              + ' · statut=' + expData.statut
-              + ' · cycle=' + expData.currentCycleId;
-          }
 
           var cycleTermine = isCycleTermine(cycleData);
 
