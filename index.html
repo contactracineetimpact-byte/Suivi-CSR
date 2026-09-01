@@ -3255,24 +3255,59 @@ function renderExperienceProgress() {
             html += '</div>';
           }
 
-          // ── CE QUI A CHANGÉ ─────────────────────────────────────────
-          // Chantier 8 : comparaison brute de la même réponse entre le
-          // premier et le dernier cycle — jamais de phrase d'interprétation
-          // ajoutée, seulement les deux réponses telles qu'écrites.
+          // ── MON MIROIR ───────────────────────────────────────────────
+          // MIS À JOUR (31/08/2026) — Chantier 15 : restructuration de
+          // l'ancien bloc "Ce qui a changé" (Chantier 8). Même donnée
+          // source (evolutions[]), désormais thématisée via son champ
+          // `label` (déjà calculé côté serveur, jamais exploité jusqu'ici)
+          // plutôt qu'affichée en liste brute — plus une carte "Tes
+          // décisions" à partir de cycles[].decisionSuivante (déjà
+          // disponible, déjà utilisé dans le PDF au Chantier 13). Aucune
+          // nouvelle donnée, aucun nouveau fetch. Maximum 3 cartes.
+          // Jamais de phrase d'interprétation ajoutée — uniquement les
+          // réponses et décisions telles qu'écrites/prises.
           var evolutions = cycleData.evolutions || [];
-          if (evolutions.length > 0) {
+          var evoObjectif = evolutions.find(function(ev) { return ev.label === 'objectif'; });
+          var evoAction = evolutions.find(function(ev) { return ev.label === 'action'; });
+          var decisionsSeq = cycles
+            .map(function(c, i) { return { num: i + 1, decision: c.decisionSuivante }; })
+            .filter(function(d) { return d.decision; });
+
+          if (evoObjectif || evoAction || decisionsSeq.length > 0) {
             html += '<div class="chart-card">';
-            html += '<div class="chart-title">Ce qui a changé</div>';
-            evolutions.forEach(function(ev, i) {
-              if (ev.question) {
-                html += '<div style="font-size:12px;color:rgba(245,240,232,.55);font-style:italic;margin-bottom:8px">' + escapeHtml(ev.question) + '</div>';
-              }
-              html += '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(245,240,232,.5);margin-bottom:2px">' + escapeHtml(ev.premiereCycleLabel || 'Premier cycle') + '</div>';
+            html += '<div class="chart-title">Mon miroir</div>';
+            html += '<div style="font-size:12px;color:rgba(245,240,232,.5);margin-bottom:14px">Ce que ton parcours montre, à partir de tes propres réponses.</div>';
+
+            function renderEvoCard(titre, ev, isLast) {
+              html += '<div style="' + (isLast ? '' : 'margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(245,240,232,.1)') + '">';
+              html += '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:8px">' + escapeHtml(titre) + '</div>';
+              html += '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(245,240,232,.5);margin-bottom:2px">Au départ</div>';
               html += '<div style="font-size:14px;color:var(--creme);line-height:1.5;margin-bottom:8px">« ' + escapeHtml(ev.premiereReponse) + ' »</div>';
               html += '<div style="text-align:center;color:var(--or);font-size:14px;opacity:.7">↓</div>';
-              html += '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin:6px 0 2px">' + escapeHtml(ev.derniereCycleLabel || 'Dernier cycle') + '</div>';
-              html += '<div style="font-size:14px;color:var(--creme);line-height:1.5' + (i < evolutions.length - 1 ? ';margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(245,240,232,.1)' : '') + '">« ' + escapeHtml(ev.derniereReponse) + ' »</div>';
-            });
+              html += '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(245,240,232,.5);margin:6px 0 2px">Aujourd\'hui</div>';
+              html += '<div style="font-size:14px;color:var(--creme);line-height:1.5">« ' + escapeHtml(ev.derniereReponse) + ' »</div>';
+              html += '</div>';
+            }
+
+            var cartesRestantes = (evoObjectif ? 1 : 0) + (evoAction ? 1 : 0) + (decisionsSeq.length > 0 ? 1 : 0);
+            var carteIndex = 0;
+            if (evoObjectif) {
+              carteIndex++;
+              renderEvoCard('Ce que je cherche', evoObjectif, carteIndex === cartesRestantes);
+            }
+            if (evoAction) {
+              carteIndex++;
+              renderEvoCard('Ce que je fais', evoAction, carteIndex === cartesRestantes);
+            }
+            if (decisionsSeq.length > 0) {
+              carteIndex++;
+              html += '<div>';
+              html += '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin-bottom:8px">Tes décisions</div>';
+              decisionsSeq.forEach(function(d) {
+                html += '<div style="font-size:14px;color:var(--creme);line-height:1.8">Cycle ' + d.num + ' → ' + escapeHtml(d.decision) + '</div>';
+              });
+              html += '</div>';
+            }
             html += '</div>';
           }
 
