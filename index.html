@@ -251,6 +251,13 @@ canvas{width:100%;height:100%}
          cumulées sur l'expérience active). Masqué si non pertinent. -->
     <div id="home-preuves" style="display:none;background:rgba(245,240,232,.04);border:1px solid rgba(245,240,232,.1);border-radius:8px;padding:14px 16px;margin-bottom:16px"></div>
 
+    <!-- NOUVEAU (31/08/2026) — Chantier 17 : aperçu de "Mon miroir" depuis
+         l'accueil, pour que la preuve de transformation ne reste pas
+         cachée dans Progression. Rempli par renderHubBadges() (même fetch
+         déjà en place, aucun appel supplémentaire). Masqué si aucune
+         évolution réelle n'existe. -->
+    <div id="home-miroir" style="display:none;background:rgba(245,240,232,.04);border:1px solid rgba(245,240,232,.1);border-radius:8px;padding:14px 16px;margin-bottom:16px"></div>
+
     <!-- Rappel jour manqué -->
     <div id="missed-day-banner" style="display:none;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.35);border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:#D9BC66;line-height:1.5"></div>
 
@@ -891,8 +898,10 @@ function renderHubTimeline() {
 function renderHubBadges() {
   var elHub = document.getElementById('hub-badges');
   var elHome = document.getElementById('home-preuves');
+  var elMiroir = document.getElementById('home-miroir');
   if (elHub) elHub.style.display = 'none';
   if (elHome) elHome.style.display = 'none';
+  if (elMiroir) elMiroir.style.display = 'none';
 
   fetch('/api/get-experience?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
     .then(function(r) { return r.json(); })
@@ -902,6 +911,28 @@ function renderHubBadges() {
       return fetch('/api/get-cycle-summary?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
         .then(function(r) { return r.json(); })
         .then(function(cycleData) {
+          // NOUVEAU (31/08/2026) — Chantier 17 : aperçu de "Mon miroir".
+          // Réutilise cycleData.evolutions, déjà calculé dans cette même
+          // réponse (Chantier 8) — aucun appel, aucun calcul de plus. Une
+          // seule évolution affichée : l'action en priorité (plus concrète
+          // et plus fréquemment disponible que l'objectif, qui n'est
+          // presque jamais réécrit après le premier cycle — Chantier 10).
+          // Rien n'est affiché si aucune évolution réelle n'existe.
+          if (elMiroir) {
+            var evolutions = cycleData && cycleData.evolutions || [];
+            var evoAPrevisualiser = evolutions.find(function(ev) { return ev.label === 'action'; }) || evolutions.find(function(ev) { return ev.label === 'objectif'; });
+            if (evoAPrevisualiser) {
+              var htmlMiroir = '<div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--or);margin-bottom:8px">Un regard sur ton parcours</div>'
+                + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(245,240,232,.5);margin-bottom:2px">Au départ</div>'
+                + '<div style="font-size:13px;color:var(--creme);line-height:1.5;margin-bottom:6px">« ' + escapeHtml(evoAPrevisualiser.premiereReponse) + ' »</div>'
+                + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(245,240,232,.5);margin-bottom:2px">Aujourd\'hui</div>'
+                + '<div style="font-size:13px;color:var(--creme);line-height:1.5;margin-bottom:10px">« ' + escapeHtml(evoAPrevisualiser.derniereReponse) + ' »</div>'
+                + '<div style="font-size:12px;color:var(--or);cursor:pointer" onclick="showNav(\'tableau\')">→ Voir mon parcours</div>';
+              elMiroir.innerHTML = htmlMiroir;
+              elMiroir.style.display = 'block';
+            }
+          }
+
           var preuves = cycleData && cycleData.preuves;
           if (!preuves) return;
 
