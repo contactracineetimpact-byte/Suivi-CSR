@@ -214,6 +214,43 @@ export default async function handler(req, res) {
       (r) => extractSelectName(r.fields['Signal émotionnel apparu']) === 'Oui'
     );
     const decisionsEnregistrees = cycles.filter((c) => c.decisionSuivante).length;
+
+    // NOUVEAU (31/08/2026) — Chantier 16 : « Moments & Ajustements ».
+    // Juxtapose une citation réelle ("Ce qui s'est passé juste avant") d'un
+    // cycle donné avec l'action réellement testée au cycle SUIVANT — sans
+    // jamais écrire ni suggérer de lien de causalité, seulement les deux
+    // faits, datés. Réutilise experienceCheckins (déjà calculé ci-dessus
+    // pour "preuves") et cycles (déjà construit plus haut) — aucun appel
+    // Airtable supplémentaire. Une entrée n'est créée QUE si une citation
+    // réelle existe pour ce cycle ; l'ajustement suivant n'est attaché que
+    // s'il existe réellement (jamais inventé). Si plusieurs citations
+    // existent pour un même cycle, seule la plus récente est retenue —
+    // règle simple, cohérente avec le tri déjà utilisé pour `citations`.
+    const moments = [];
+    cycles.forEach((c, i) => {
+      const checkinsCeCycle = experienceCheckins.filter(
+        (r) => Array.isArray(r.fields['Cycle']) && r.fields['Cycle'].includes(c.cycleId)
+      );
+      const citationsCeCycle = checkinsCeCycle
+        .filter((r) => r.fields['Ce qui s\'est passé juste avant'] && r.fields['Ce qui s\'est passé juste avant'].trim())
+        .sort((a, b) => new Date(b.fields['Horodatage'] || 0) - new Date(a.fields['Horodatage'] || 0));
+      if (citationsCeCycle.length === 0) return;
+
+      const plusRecente = citationsCeCycle[0];
+      const cycleSuivant = cycles[i + 1];
+      moments.push({
+        cycleLabel: c.nomCycle,
+        citation: plusRecente.fields['Ce qui s\'est passé juste avant'].trim(),
+        date: plusRecente.fields['Horodatage'] ? plusRecente.fields['Horodatage'].slice(0, 10) : null,
+        ajustementCycleLabel: cycleSuivant ? cycleSuivant.nomCycle : null,
+        ajustementAction: cycleSuivant && cycleSuivant.actionsPrevues ? cycleSuivant.actionsPrevues : null,
+      });
+    });
+    // Les plus récentes en premier, maximum 3 — cohérent avec le reste du
+    // produit (toujours privilégier ce qui est le plus proche du présent).
+    moments.reverse();
+    const momentsAffiches = moments.slice(0, 3);
+
     let preuves = null;
     if (experienceCheckins.length > 0 || cycles.length > 0) {
       let compteurSecondaire = 0;
@@ -312,6 +349,7 @@ export default async function handler(req, res) {
       experienceId: experienceRecordId,
       indicateur,
       citations,
+      moments: momentsAffiches,
       totalObservations,
       evolutions,
       preuves,
