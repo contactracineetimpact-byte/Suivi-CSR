@@ -1007,7 +1007,7 @@ function renderHubBadges() {
             var items = [];
             items.push(preuves.observations + ' observation' + (preuves.observations !== 1 ? 's' : ''));
             if (preuves.labelSecondaire === 'signal identifié') {
-              items.push(preuves.compteurSecondaire + ' ' + (preuves.compteurSecondaire !== 1 ? 'signaux' : 'signal') + ' identifié' + (preuves.compteurSecondaire !== 1 ? 's' : ''));
+              items.push('Repéré ' + preuves.compteurSecondaire + ' fois');
             } else if (preuves.labelSecondaire === 'interception réussie') {
               items.push(preuves.compteurSecondaire + ' interception' + (preuves.compteurSecondaire !== 1 ? 's' : '') + ' réussie' + (preuves.compteurSecondaire !== 1 ? 's' : ''));
             }
@@ -1145,7 +1145,7 @@ function renderEncouragement() {
   var msg = '';
   if (ups === 3) msg = "✦ Les 3 dimensions progressent depuis le départ. Ton fonctionnement se transforme.";
   else if (ups === 2) msg = "✦ 2 dimensions en progression. Continue — la troisième suivra.";
-  else if (ups === 1) msg = "✦ Une dimension avance. C'est un signal. Concentre l'énergie là.";
+  else if (ups === 1) msg = "✦ Une dimension avance. C'est encourageant. Concentre l'énergie là.";
   else msg = "Pas encore de progression visible. Parle-en avec Franck à la prochaine séance.";
   el.textContent = msg;
   el.style.display = 'block';
@@ -1782,7 +1782,7 @@ function buildAndDownloadParcours(expData, cycleData) {
     html += '<div class="seance-block">';
     if (expData.objectif) html += '<div class="parcours-intro"><b>Objectif :</b> ' + escapeHtml(expData.objectif) + '</div>';
     html += '<div class="parcours-intro"><b>Moteur :</b> ' + moteurLabel + '</div>';
-    if (signalTexte) html += '<div class="parcours-intro"><b>Signal travaillé :</b> ' + escapeHtml(signalTexte) + '</div>';
+    if (signalTexte) html += '<div class="parcours-intro"><b>Ce qui déclenche :</b> ' + escapeHtml(signalTexte) + '</div>';
     // NOUVEAU (31/08/2026) — Chantier 13 : statut factuel, uniquement
     // lorsqu'il a une vraie signification pour le lecteur (En pause /
     // Consolidé) — jamais pour un statut technique actif ("Test en
@@ -1843,7 +1843,7 @@ function buildAndDownloadParcours(expData, cycleData) {
       html += '<div class="preuves-row">';
       html += '<div class="preuve-item">' + preuves.observations + ' observation' + (preuves.observations !== 1 ? 's' : '') + '</div>';
       if (preuves.labelSecondaire === 'signal identifié') {
-        html += '<div class="preuve-item">' + preuves.compteurSecondaire + ' ' + (preuves.compteurSecondaire !== 1 ? 'signaux' : 'signal') + ' identifié' + (preuves.compteurSecondaire !== 1 ? 's' : '') + '</div>';
+        html += '<div class="preuve-item">Repéré ' + preuves.compteurSecondaire + ' fois</div>';
       } else if (preuves.labelSecondaire === 'interception réussie') {
         html += '<div class="preuve-item">' + preuves.compteurSecondaire + ' interception' + (preuves.compteurSecondaire !== 1 ? 's' : '') + ' réussie' + (preuves.compteurSecondaire !== 1 ? 's' : '') + '</div>';
       }
@@ -1962,7 +1962,7 @@ function syncFromServer(code) {
 var QUESTIONS_ANCRAGE = [
   { id: 'A1', lettre: 'A', titre: 'Ambition', question: "Qu'est-ce que tu veux obtenir concrètement d'ici 60 jours ?" },
   { id: 'N1', lettre: 'N', titre: 'Neutraliser les résistances', question: "Qu'est-ce qui pourrait rendre l'action difficile, et que peux-tu préparer à l'avance ?" },
-  { id: 'C1', lettre: 'C', titre: 'Connecter (signal émotionnel)', question: "Quelle émotion, sensation ou tension intérieure apparaît juste avant que tu aies tendance à rester dans ton ancien fonctionnement ? (Un contexte comme \"après le café\" peut t'aider à le repérer, mais ce n'est pas la réponse — nomme l'émotion ou la sensation.)" },
+  { id: 'C1', lettre: 'C', titre: 'Connecter (signal émotionnel)', titreDisplay: 'Connecter', question: "Quelle émotion, sensation ou tension intérieure apparaît juste avant que tu aies tendance à rester dans ton ancien fonctionnement ? (Un contexte comme \"après le café\" peut t'aider à le repérer, mais ce n'est pas la réponse — nomme l'émotion ou la sensation.)" },
   { id: 'R1', lettre: 'R', titre: 'Représenter', question: "Imagine-toi au moment de commencer : que fais-tu exactement, et comment te sens-tu juste après ?" },
   { id: 'A2', lettre: 'A', titre: 'Agir', question: "Quelle est la plus petite action qui constitue un vrai progrès ?" },
   { id: 'G1', lettre: 'G', titre: 'Garder la preuve', question: "Comment vas-tu constater, chaque jour, que tu l'as fait ?" },
@@ -1971,9 +1971,9 @@ var QUESTIONS_ANCRAGE = [
 var QUESTIONS_RUPTURE = [
   { id: 'R1', lettre: 'R', titre: 'Résultat recherché', question: "Qu'est-ce que tu veux pouvoir faire ou vivre à la place de cette habitude ?" },
   { id: 'U1', lettre: 'U', titre: 'Un frein', question: "Qu'est-ce qui rend cette habitude trop facile aujourd'hui, et quel obstacle peux-tu ajouter ?" },
-  { id: 'P1', lettre: 'P', titre: 'Percevoir le signal (émotion)', question: "Quelle émotion, sensation ou tension intérieure annonce que l'habitude est sur le point de commencer ?" },
-  { id: 'P2', lettre: 'P', titre: "Percevoir le signal (ancien automatisme)", question: "Concrètement, qu'est-ce que tu fais dans ce cas précis — le comportement exact que tu veux interrompre ?" },
-  { id: 'T1', lettre: 'T', titre: 'Transformer la réponse (avec charge équivalente)', question: "Si ce signal apparaît, quelle réponse veux-tu avoir à la place ?" },
+  { id: 'P1', lettre: 'P', titre: 'Percevoir le signal (émotion)', titreDisplay: 'Ce qui se passe juste avant (émotion)', question: "Quelle émotion, sensation ou tension intérieure annonce que l'habitude est sur le point de commencer ?" },
+  { id: 'P2', lettre: 'P', titre: "Percevoir le signal (ancien automatisme)", titreDisplay: "Ce qui se passe juste avant (ancien automatisme)", question: "Concrètement, qu'est-ce que tu fais dans ce cas précis — le comportement exact que tu veux interrompre ?" },
+  { id: 'T1', lettre: 'T', titre: 'Transformer la réponse (avec charge équivalente)', question: "Si ça se reproduit, quelle réponse veux-tu avoir à la place ?" },
   { id: 'U2', lettre: 'U', titre: "Utiliser l'alternative", question: "Quelle est la plus petite action qui te permet d'interrompre le cycle ?" },
   { id: 'R2', lettre: 'R', titre: 'Relever la preuve', question: "Comment vas-tu noter, chaque jour, si tu as intercepté ou non ?" },
 ];
@@ -2208,7 +2208,7 @@ function renderQuestionnaire(moteur) {
   questions.forEach(function(q) {
     html += '<div class="score-block">'
       + '<div class="score-block-name"><div class="score-dot" style="background:' + color + '"></div>'
-      + q.lettre + ' — ' + q.titre + '</div>'
+      + q.lettre + ' — ' + (q.titreDisplay || q.titre) + '</div>'
       + '<div class="score-question">' + q.question + '</div>'
       + '<textarea class="just-input" id="qa-' + q.id + '" placeholder="Ta réponse..."></textarea>'
       + '<div class="field-err" id="qerr-' + q.id + '">Ce champ est obligatoire.</div>'
@@ -2357,7 +2357,7 @@ function renderCyclePrepForm(moteur, objectif, checkinContext) {
   }
 
   if (moteur === 'ANCRAGE') {
-    html += signalBlock('C1', 'Signal', "Quelle émotion, sensation ou tension intérieure apparaît juste avant que tu aies tendance à rester dans ton ancien fonctionnement ?", checkinContext && checkinContext.signal);
+    html += signalBlock('C1', 'Ce qui déclenche', "Quelle émotion, sensation ou tension intérieure apparaît juste avant que tu aies tendance à rester dans ton ancien fonctionnement ?", checkinContext && checkinContext.signal);
 
     html += '<div class="score-block">'
       + '<div class="score-block-name">Ce que je teste maintenant</div>'
@@ -2373,13 +2373,13 @@ function renderCyclePrepForm(moteur, objectif, checkinContext) {
       + '<div class="field-err" id="cp-resistance-err">Ce champ est obligatoire.</div>'
       + '</div>';
   } else if (moteur === 'RUPTURE') {
-    html += signalBlock('P1', 'Signal — émotion', "Quelle émotion, sensation ou tension intérieure annonce que l'habitude est sur le point de commencer ?", checkinContext && checkinContext.signal);
-    html += signalBlock('P2', 'Signal — ancien automatisme', "Concrètement, qu'est-ce que tu fais dans ce cas précis — le comportement exact que tu veux interrompre ?", checkinContext && checkinContext.ancienComportement);
+    html += signalBlock('P1', 'Ce qui se passe juste avant', "Quelle émotion, sensation ou tension intérieure annonce que l'habitude est sur le point de commencer ?", checkinContext && checkinContext.signal);
+    html += signalBlock('P2', 'Ancien automatisme', "Concrètement, qu'est-ce que tu fais dans ce cas précis — le comportement exact que tu veux interrompre ?", checkinContext && checkinContext.ancienComportement);
 
     html += '<div class="score-block">'
       + '<div class="score-block-name">Ce que je teste maintenant</div>'
       + '<div class="just-label" style="margin-bottom:6px">Nouvelle réponse à tester</div>'
-      + '<div class="score-question" style="margin-bottom:8px">Si ce signal apparaît, quelle réponse veux-tu avoir à la place ?</div>'
+      + '<div class="score-question" style="margin-bottom:8px">Si ça se reproduit, quelle réponse veux-tu avoir à la place ?</div>'
       + '<textarea class="just-input" id="cp-transformer" placeholder="Ta réponse..."></textarea>'
       + '<div class="field-err" id="cp-transformer-err">Ce champ est obligatoire.</div>'
       + '<div class="just-label" style="margin:14px 0 6px">Petite action pour commencer</div>'
@@ -2490,7 +2490,7 @@ function submitCyclePrep() {
       document.querySelector('#quest-blocks .just-input.error').scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
-    answers.push({ etape: 'T — Transformer la réponse (avec charge équivalente)', question: "Si ce signal apparaît, quelle réponse veux-tu avoir à la place ?", reponse: transformer });
+    answers.push({ etape: 'T — Transformer la réponse (avec charge équivalente)', question: "Si ça se reproduit, quelle réponse veux-tu avoir à la place ?", reponse: transformer });
     answers.push({ etape: "U — Utiliser l'alternative", question: "Quelle est la plus petite action qui te permet d'interrompre le cycle ?", reponse: utiliser });
     answers.push({ etape: 'U — Un frein', question: "Qu'est-ce qui rend cette habitude trop facile aujourd'hui, et quel obstacle peux-tu ajouter ?", reponse: frein });
     answers.push({ etape: 'R — Relever la preuve', question: "Comment vas-tu noter, chaque jour, si tu as intercepté ou non ?", reponse: preuve });
@@ -2685,7 +2685,7 @@ function renderBilanSuggestion() {
   } else if (resultat >= 4 && facilite <= 2) {
     msg = "De bons résultats, mais difficile à tenir — un signe que ça mérite d'être renforcé ou automatisé plutôt que remis en question.";
   } else if (resultat >= 4 && facilite >= 4) {
-    msg = "Résultat et facilité tous les deux élevés — un bon signal pour consolider ce qui est en place.";
+    msg = "Résultat et facilité tous les deux élevés — de quoi consolider ce qui est en place.";
   }
 
   if (msg) {
@@ -3010,7 +3010,7 @@ function pcWrap(title, subtitle, buttonsHtml) {
 function pcRenderStep(step) {
   if (step === 'signal') {
     pcWrap(
-      '🧠 Ton signal est apparu aujourd\'hui ?',
+      '🧠 Est-ce arrivé aujourd\'hui ?',
       pcContext.signal,
       pcButton('Oui', "pcAnswerSignal('Oui')", '#8fbf8f') + pcButton('Non', "pcAnswerSignal('Non')")
     );
@@ -3054,7 +3054,7 @@ function pcRenderStep(step) {
     var preuve = pcContext.preuve || '';
     var icon = noSignal ? '·' : (success ? '✓' : '🌱');
     var message = noSignal
-      ? "Pas de signal aujourd'hui. C'est noté. À demain."
+      ? "Rien de particulier aujourd'hui. C'est noté. À demain."
       : (success ? 'C\'est noté. À demain. 🌱' : 'C\'est noté aussi. Ça arrive. À demain.');
     var html3 = '<div style="text-align:center;padding:14px 10px">'
       + '<div style="font-size:26px;margin-bottom:8px">' + icon + '</div>';
@@ -3066,7 +3066,7 @@ function pcRenderStep(step) {
   } else if (step === 'duplicate') {
     document.getElementById('today-card').innerHTML =
       '<div style="text-align:center;padding:14px 10px">'
-      + '<div style="font-size:14px;color:#D9BC66;margin-bottom:14px">Tu as déjà répondu aujourd\'hui. Le signal est réapparu une autre fois ?</div>'
+      + '<div style="font-size:14px;color:#D9BC66;margin-bottom:14px">Tu as déjà répondu aujourd\'hui. C\'est réapparu une autre fois ?</div>'
       + '<button class="btn-engage" onclick="pcSubmit(true)">Ajouter ce nouveau moment</button>'
       + '</div>';
   }
@@ -3544,10 +3544,10 @@ function renderExperienceProgress() {
               html += '<div style="font-size:13px;color:var(--creme);margin-bottom:6px">' + cycleData.totalObservations + ' observation' + (cycleData.totalObservations > 1 ? 's' : '') + ' enregistrée' + (cycleData.totalObservations > 1 ? 's' : '') + '</div>';
             }
             if (cycleData.indicateur && cycleData.indicateur.insuffisant) {
-              html += '<div style="font-size:13px;color:var(--creme);margin-bottom:6px">Signal identifié ' + cycleData.indicateur.observations + ' fois</div>';
+              html += '<div style="font-size:13px;color:var(--creme);margin-bottom:6px">Repéré ' + cycleData.indicateur.observations + ' fois</div>';
               html += '<div style="font-size:12px;color:rgba(245,240,232,.5);font-style:italic;margin-bottom:6px">Pas encore assez d\'observations pour un ratio fiable (' + cycleData.indicateur.seuil + ' minimum).</div>';
             } else if (cycleData.indicateur && cycleData.indicateur.type) {
-              html += '<div style="font-size:13px;color:var(--creme);margin-bottom:6px">Signal identifié ' + cycleData.indicateur.total + ' fois</div>';
+              html += '<div style="font-size:13px;color:var(--creme);margin-bottom:6px">Repéré ' + cycleData.indicateur.total + ' fois</div>';
               html += '<div style="font-size:13px;color:var(--or)">' + escapeHtml(cycleData.indicateur.type) + ' : <b>' + cycleData.indicateur.valeur + ' sur ' + cycleData.indicateur.total + '</b></div>';
             }
             if (citations.length > 0) {
