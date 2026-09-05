@@ -633,6 +633,30 @@ canvas{width:100%;height:100%}
     <div class="score-block" style="border-color:rgba(201,168,76,.45);background:rgba(201,168,76,.06)">
       <div class="action-eyebrow">Ton prochain petit pas</div>
       <div class="action-question" style="font-size:20px" id="plan-petit-pas-text"></div>
+
+      <!-- NOUVEAU (P1-5) — CTA de validation, visible uniquement si un petit
+           pas Actif existe. Jamais mélangé avec le check-in quotidien. -->
+      <button class="btn-ghost" id="btn-petit-pas-termine" onclick="ouvrirValidationPetitPas()"
+        style="width:100%;padding:12px;margin-top:14px;font-size:13px;display:none">
+        Ton petit pas est-il terminé ?
+      </button>
+
+      <!-- Confirmation + "qu'est-ce qui s'est passé" -->
+      <div id="petit-pas-confirmation" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid rgba(245,240,232,.12)">
+        <div class="just-label" style="margin-bottom:6px">Qu'est-ce qui s'est passé ?</div>
+        <textarea class="just-input" id="petit-pas-ce-qui-sest-passe" placeholder="Ta réponse..."></textarea>
+        <div class="field-err" id="petit-pas-ce-qui-sest-passe-err">Ce champ est obligatoire.</div>
+        <div style="display:flex;gap:10px;margin-top:10px">
+          <button class="btn-ghost" onclick="annulerValidationPetitPas()" style="flex:1;padding:11px;font-size:12px">← Annuler</button>
+          <button class="btn-ghost" id="btn-confirmer-petit-pas-termine" onclick="confirmerPetitPasTermine()" style="flex:1;padding:11px;font-size:12px;background:rgba(201,168,76,.12);border-color:var(--or)">Confirmer</button>
+        </div>
+        <div id="petit-pas-erreur" class="field-err" style="display:none;margin-top:8px"></div>
+      </div>
+
+      <!-- État transitoire — plus de petit pas Actif, en attendant P1-6 -->
+      <div id="petit-pas-transitoire" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid rgba(245,240,232,.12);font-size:13px;color:rgba(245,240,232,.6);font-style:italic">
+        Petit pas terminé. Ton prochain petit pas sera défini ensuite.
+      </div>
     </div>
 
     <div class="score-block" id="plan-frein-block" style="display:none">
@@ -2796,6 +2820,139 @@ function renderPlan(answers, options) {
   // Écran replié par défaut à chaque nouvel affichage du plan.
   document.getElementById('plan-details').style.display = 'none';
   document.getElementById('plan-details-toggle').textContent = 'Voir les autres éléments de mon plan ▾';
+
+  // NOUVEAU (P1-5) — Repliée par défaut à chaque nouvel affichage du plan ;
+  // l'état du bouton/CTA est résolu séparément, de façon toujours autoritaire.
+  document.getElementById('petit-pas-confirmation').style.display = 'none';
+  refreshPetitPasCTA();
+}
+
+// NOUVEAU (P1-5) — configId du petit pas actuellement Actif, résolu via
+// get-experience.js (seule source de vérité, mêmes règles de statut et de
+// rétrocompatibilité que P1-5 bis). Jamais déduit localement : ni la
+// création initiale ni la reprise de cycle ne renvoient cet identifiant
+// directement, donc on le redemande systématiquement plutôt que de deviner.
+var currentPetitPasConfigId = null;
+
+function refreshPetitPasCTA() {
+  var btn = document.getElementById('btn-petit-pas-termine');
+  var transitoire = document.getElementById('petit-pas-transitoire');
+  fetch('/api/get-experience?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var petitPas = data.checkinContext && data.checkinContext.petitPas;
+      if (petitPas && petitPas.configId) {
+        currentPetitPasConfigId = petitPas.configId;
+        btn.style.display = 'block';
+        transitoire.style.display = 'none';
+      } else {
+        currentPetitPasConfigId = null;
+        btn.style.display = 'none';
+        transitoire.style.display = 'block';
+      }
+    })
+    .catch(function(e) {
+      // En cas d'échec réseau, on masque prudemment le bouton plutôt que
+      // de risquer une action sur un configId incertain.
+      currentPetitPasConfigId = null;
+      btn.style.display = 'none';
+      console.warn('Erreur refreshPetitPasCTA :', e);
+    });
+}
+
+function ouvrirValidationPetitPas() {
+  document.getElementById('btn-petit-pas-termine').style.display = 'none';
+  document.getElementById('petit-pas-confirmation').style.display = 'block';
+  document.getElementById('petit-pas-ce-qui-sest-passe').value = '';
+  document.getElementById('petit-pas-ce-qui-sest-passe-err').style.display = 'none';
+  document.getElementById('petit-pas-erreur').style.display = 'none';
+}
+
+function annulerValidationPetitPas() {
+  document.getElementById('petit-pas-confirmation').style.display = 'none';
+  document.getElementById('btn-petit-pas-termine').style.display = 'block';
+}
+
+function confirmerPetitPasTermine() {
+  var input = document.getElementById('petit-pas-ce-qui-sest-passe');
+  var err = document.getElementById('petit-pas-ce-qui-sest-passe-err');
+  var val = input.value.trim();
+  if (!val || val.length < 3) {
+    input.classList.add('error');
+    err.style.display = 'block';
+    return;
+  }
+  input.classList.remove('error');
+  err.style.display = 'none';
+
+  if (!currentPetitPasConfigId) {
+    document.getElementById('petit-pas-erreur').textContent = "Impossible de trouver le petit pas actif. Recharge la page et réessaie.";
+    document.getElementById('petit-pas-erreur').style.display = 'block';
+    return;
+  }
+
+  var btn = document.getElementById('btn-confirmer-petit-pas-termine');
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement...';
+  var errEl = document.getElementById('petit-pas-erreur');
+  errEl.style.display = 'none';
+
+  // Ordre volontaire : on enregistre d'abord "ce qui s'est passé" (mode
+  // création, inchangé), et seulement ensuite la transition Actif→Terminé.
+  // Si la transition échouait après une transition déjà faite en premier,
+  // le petit pas serait Terminé sans que sa raison ne soit jamais
+  // enregistrée nulle part — perte d'information irréversible via cet
+  // écran. Dans l'ordre choisi, le pire cas d'un échec de la transition
+  // après succès de cette écriture est une note "ce qui s'est passé" en
+  // trop si le client réessaie — sans perte d'information.
+  fetch('/api/save-configuration', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      code: code,
+      etape: 'Petit pas terminé — ce qui s\'est passé',
+      question: "Qu'est-ce qui s'est passé ?",
+      reponse: val,
+      cycleId: currentCycleId,
+    }),
+  })
+    .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+    .then(function(result) {
+      if (!result.ok) {
+        throw new Error(result.data.error || "Échec de l'enregistrement de ce qui s'est passé.");
+      }
+      // Puis la transition seule (sans création d'un nouveau petit pas —
+      // P1-6 s'en chargera séparément).
+      return fetch('/api/save-configuration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: code,
+          configId: currentPetitPasConfigId,
+          newStatut: 'Terminé',
+        }),
+      }).then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); });
+    })
+    .then(function(result) {
+      btn.disabled = false;
+      btn.textContent = 'Confirmer';
+      if (!result.ok) {
+        // "Ce qui s'est passé" est déjà enregistré à ce stade — on le dit
+        // clairement plutôt que de masquer l'échec partiel.
+        errEl.textContent = "Ta réponse a bien été enregistrée, mais la validation du petit pas a échoué (" + (result.data.error || 'erreur inconnue') + "). Réessaie, ou préviens Franck.";
+        errEl.style.display = 'block';
+        return;
+      }
+      document.getElementById('petit-pas-confirmation').style.display = 'none';
+      refreshPetitPasCTA();
+    })
+    .catch(function(e) {
+      btn.disabled = false;
+      btn.textContent = 'Confirmer';
+      errEl.textContent = e.message || "Erreur réseau. Réessaie, ou préviens Franck si ça persiste.";
+      errEl.style.display = 'block';
+      console.warn('Erreur confirmerPetitPasTermine :', e);
+    });
 }
 
 function togglePlanDetails() {
