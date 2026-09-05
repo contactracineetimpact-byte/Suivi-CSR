@@ -69,6 +69,7 @@ export default async function handler(req, res) {
     const TABLE_CLIENTS = 'SuiviCSR_Clients';
     const TABLE_CONFIG = 'CSR_Configuration';
     const TABLE_CYCLES = 'CSR_Cycles';
+    const TABLE_EXPERIENCES = 'CSR_Expériences';
 
     const headers = {
       Authorization: `Bearer ${AIRTABLE_TOKEN}`,
@@ -253,6 +254,48 @@ export default async function handler(req, res) {
       const cycleExpLinks = checkData.fields['Expérience'];
       if (!Array.isArray(cycleExpLinks) || !cycleExpLinks.includes(experienceRecordId)) {
         return res.status(403).json({ error: "Ce cycle n'appartient pas à l'expérience active de ce client." });
+      }
+    }
+
+    // NOUVEAU (P1-6) — Garde-fou d'unicité : avant de créer un nouveau petit
+    // pas (étape 'A — Agir' ou "U — Utiliser l'alternative"), vérifier
+    // qu'aucun autre n'est déjà 'Actif' pour ce cycle. Réutilise le même
+    // mécanisme de lecture par liaison inverse que get-experience.js
+    // (fetch de l'expérience, puis de chaque CSR_Configuration liée par
+    // son ID) — jamais de filterByFormula sur toute la table.
+    if (estEtapePetitPas(etape)) {
+      const expUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_EXPERIENCES}/${experienceRecordId}`;
+      const expRes = await fetch(expUrl, { headers });
+      if (expRes.ok) {
+        const expData = await expRes.json();
+        const configIds = expData.fields['CSR_Configuration'] || [];
+        const existingRows = await Promise.all(
+          configIds.map(async (id) => {
+            const r = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CONFIG}/${id}`, { headers });
+            return r.ok ? r.json() : null;
+          })
+        );
+        const dejaActif = existingRows.find((r) => {
+          if (!r || r.fields['Étape'] !== etape) return false;
+          if (cycleId) {
+            const rCycleLinks = r.fields['Cycle'] || [];
+            if (!rCycleLinks.includes(cycleId)) return false;
+          }
+          const s = r.fields['Statut du petit pas'];
+          const sNom = typeof s === 'string' ? s : s && s.name;
+          return sNom === 'Actif';
+        });
+        if (dejaActif) {
+          // Ne jamais créer de doublon : on renvoie explicitement l'Actif
+          // déjà existant, pour que le client puisse recharger et afficher
+          // celui-là au lieu d'en créer un second.
+          return res.status(409).json({
+            alreadyActive: true,
+            error: 'Un petit pas est déjà actif pour ce cycle.',
+            configId: dejaActif.id,
+            reponse: dejaActif.fields['Réponse'],
+          });
+        }
       }
     }
 
