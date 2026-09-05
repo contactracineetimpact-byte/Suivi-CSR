@@ -623,7 +623,48 @@ canvas{width:100%;height:100%}
       <button class="btn-ghost" onclick="goHub()" style="font-size:13px">⌂ Accueil</button>
     </div>
 
-    <div class="score-block" id="plan-checklist"></div>
+    <!-- NOUVEAU (P1-4) — Objectif, discret, juste pour le contexte. -->
+    <div class="score-block" id="plan-objectif" style="display:none">
+      <div class="score-block-name" style="margin-bottom:4px">Ton objectif</div>
+      <div style="font-size:14px;color:var(--creme);line-height:1.5" id="plan-objectif-text"></div>
+    </div>
+
+    <!-- NOUVEAU (P1-4) — Le petit pas, seul élément vraiment mis en avant. -->
+    <div class="score-block" style="border-color:rgba(201,168,76,.45);background:rgba(201,168,76,.06)">
+      <div class="action-eyebrow">Ton prochain petit pas</div>
+      <div class="action-question" style="font-size:20px" id="plan-petit-pas-text"></div>
+    </div>
+
+    <div class="score-block" id="plan-frein-block" style="display:none">
+      <div class="score-block-name" style="margin-bottom:4px">Ce qui pourrait te bloquer</div>
+      <div style="font-size:14px;color:var(--creme);line-height:1.5" id="plan-frein-text"></div>
+    </div>
+
+    <div class="score-block" id="plan-solution-block" style="display:none">
+      <div class="score-block-name" style="margin-bottom:4px">Ce que tu vas tester</div>
+      <div style="font-size:14px;color:var(--creme);line-height:1.5" id="plan-solution-text"></div>
+    </div>
+
+    <!-- NOUVEAU (P1-4) — Préparation légère, facultative, jamais confondue
+         avec le petit pas lui-même. -->
+    <div class="score-block">
+      <div class="score-block-name" style="margin-bottom:4px">
+        Préparer ton passage à l'action
+        <span style="font-weight:400;color:rgba(245,240,232,.5);text-transform:none;letter-spacing:0;font-size:11px"> (facultatif)</span>
+      </div>
+      <div class="score-question">Qu'est-ce que tu peux préparer pour rendre cette action plus facile ? (une idée par ligne)</div>
+      <textarea class="just-input" id="plan-preparation-input" placeholder="Ex : ouvrir le site officiel
+préparer mes papiers
+choisir un créneau de 20 min"></textarea>
+      <button class="btn-ghost" onclick="savePreparation()" id="btn-save-preparation" style="margin-top:8px;font-size:12px;padding:9px 14px">Enregistrer</button>
+      <span id="plan-preparation-saved" style="display:none;font-size:12px;color:#8fbf8f;margin-left:10px">✓ Enregistré</span>
+    </div>
+
+    <!-- NOUVEAU (P1-4) — Le reste des réponses, secondaire, replié par défaut. -->
+    <div style="margin:6px 0 14px">
+      <a href="#" onclick="togglePlanDetails(); return false;" style="font-size:13px;color:rgba(245,240,232,.55)" id="plan-details-toggle">Voir les autres éléments de mon plan ▾</a>
+    </div>
+    <div id="plan-details" class="score-block" style="display:none"></div>
 
     <div style="color:rgba(245,240,232,.5);font-size:12px;margin-top:10px;text-align:center">
       Ce plan a bien été enregistré. Retrouve-le à tout moment depuis l'accueil.
@@ -1982,6 +2023,11 @@ var QUESTIONS_RUPTURE = [
 
 var currentMoteur = null;
 var currentExperienceId = null;
+// NOUVEAU (P1-4) — nécessaires à renderPlan() pour afficher l'objectif et
+// relier une éventuelle "Préparation" au bon cycle, quel que soit l'endroit
+// d'où le plan est affiché (première création, reprise de cycle, relecture).
+var currentObjectif = null;
+var currentCycleId = null;
 
 var pendingMoteur = null;
 // NOUVEAU (P1-1) — objectif saisi avant le choix Faire/Arrêter/Les deux,
@@ -2026,12 +2072,14 @@ function openQuestionnaire() {
 
       currentMoteur = data.moteur;
       currentExperienceId = data.experienceId;
+      currentObjectif = data.objectif;
+      currentCycleId = data.currentCycleId || null;
 
       if (data.locked) {
         // Plan déjà généré et verrouillé côté serveur : lecture seule,
         // à partir des réponses réellement stockées dans Airtable — jamais
         // depuis un cache local qui pourrait être absent ou périmé.
-        renderPlan(data.planAnswers || []);
+        renderPlan(data.planAnswers || [], { petitPas: data.checkinContext && data.checkinContext.petitPas });
         showScreen('s-plan');
         return;
       }
@@ -2254,6 +2302,7 @@ function openCyclePrep() {
 
       preparingNextCycle = true;
       currentMoteur = data.moteur;
+      currentObjectif = expData.objectif;
 
       // Contexte en lecture seule du cycle qui vient de se terminer.
       document.getElementById('quest-cycle-context-nom').textContent = data.nomCycle || 'Cycle précédent';
@@ -2541,6 +2590,7 @@ function submitCyclePrep() {
         throw new Error(result.data && result.data.error ? result.data.error : 'Échec création du cycle');
       }
       var newCycleId = result.data.cycleId;
+      currentCycleId = newCycleId;
       var savePromises = answers.map(function(a) {
         return fetch('/api/save-configuration', {
           method: 'POST',
@@ -2626,6 +2676,7 @@ function submitQuestionnaire() {
         throw new Error(result.data && result.data.error ? result.data.error : 'Échec création du cycle');
       }
       var newCycleId = result.data.cycleId;
+      currentCycleId = newCycleId;
 
       var savePromises = answers.map(function(a) {
         return fetch('/api/save-configuration', {
@@ -2645,28 +2696,149 @@ function submitQuestionnaire() {
       // prochaine ouverture de cet écran relira toujours l'état réel
       // depuis get-experience.
       preparingNextCycle = false;
+      currentObjectif = pendingObjectif;
       renderPlan(answers);
       showScreen('s-plan');
       btn.disabled = false;
       btn.textContent = 'Générer mon plan';
     })
     .catch(function(e) {
-      console.error('Erreur enregistrement questionnaire :', e);
       btn.disabled = false;
       btn.textContent = 'Générer mon plan';
       alert("Une erreur est survenue pendant l'enregistrement. Réessaie, ou préviens Franck si ça persiste.");
     });
 }
 
-function renderPlan(answers) {
-  var html = '<div class="score-block-name" style="margin-bottom:14px">Ton plan, construit à partir de tes réponses</div>';
+// NOUVEAU (P1-4) — Le petit pas, le frein et la solution sont maintenant mis
+// en avant visuellement ; le reste des réponses passe en second plan,
+// replié par défaut. Rien n'est supprimé : toute réponse continue d'être
+// affichée, seule la hiérarchie change.
+function renderPlan(answers, options) {
+  options = options || {};
+  var moteur = options.moteur || currentMoteur;
+  var objectif = options.objectif !== undefined ? options.objectif : currentObjectif;
+
+  function findReponse(predicate) {
+    var m = answers.find(function(a) { return predicate(a.etape || ''); });
+    return m ? m.reponse : null;
+  }
+
+  // Le petit pas : priorité à la résolution serveur (get-experience.js,
+  // règles de statut/rétrocompatibilité P1-5 bis) quand elle est fournie ;
+  // sinon déduit directement de la réponse qu'on vient de soumettre.
+  var petitPasTexte = (options.petitPas && options.petitPas.reponse) || (moteur === 'ANCRAGE'
+    ? findReponse(function(e) { return e === 'A — Agir'; })
+    : findReponse(function(e) { return e.includes("Utiliser l'alternative"); }));
+
+  // Compatible avec les anciennes expériences (avant P1-3), où Frein et
+  // Solution étaient une seule étape fusionnée ("Neutraliser les
+  // résistances" / "Un frein") — affichée alors comme "Frein" par défaut,
+  // sans bloc Solution séparé (qui n'existe pas pour ces anciennes données).
+  var freinTexte = findReponse(function(e) {
+    return e.includes('Frein') || e.includes('Neutraliser les résistances') || e === 'U — Un frein';
+  });
+  var solutionTexte = findReponse(function(e) { return e.includes('Solution à tester'); });
+  var preparationTexte = findReponse(function(e) { return e === 'Préparation'; });
+
+  var objEl = document.getElementById('plan-objectif');
+  if (objectif) {
+    document.getElementById('plan-objectif-text').textContent = objectif;
+    objEl.style.display = 'block';
+  } else {
+    objEl.style.display = 'none';
+  }
+
+  document.getElementById('plan-petit-pas-text').textContent = petitPasTexte || 'À définir avec Franck.';
+
+  var freinBlock = document.getElementById('plan-frein-block');
+  if (freinTexte) {
+    document.getElementById('plan-frein-text').textContent = freinTexte;
+    freinBlock.style.display = 'block';
+  } else {
+    freinBlock.style.display = 'none';
+  }
+
+  var solBlock = document.getElementById('plan-solution-block');
+  if (solutionTexte) {
+    document.getElementById('plan-solution-text').textContent = solutionTexte;
+    solBlock.style.display = 'block';
+  } else {
+    solBlock.style.display = 'none';
+  }
+
+  var prepInput = document.getElementById('plan-preparation-input');
+  var prepSaved = document.getElementById('plan-preparation-saved');
+  if (preparationTexte) {
+    prepInput.value = preparationTexte;
+    prepSaved.style.display = 'inline';
+  } else {
+    prepInput.value = '';
+    prepSaved.style.display = 'none';
+  }
+
+  // Le reste : toute réponse qui n'est ni le petit pas, ni le frein, ni la
+  // solution, ni la préparation déjà affichés ci-dessus — pour ne jamais
+  // répéter la même information deux fois à l'écran.
+  var detailsHtml = '';
   answers.forEach(function(a) {
-    html += '<div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(245,240,232,.1)">'
-      + '<div style="font-size:12px;color:var(--or);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">' + a.etape + '</div>'
-      + '<div style="font-size:14px;color:var(--creme);line-height:1.5">☐ ' + a.reponse + '</div>'
+    var e = a.etape || '';
+    var estPetitPas = (e === 'A — Agir') || e.includes("Utiliser l'alternative");
+    var estFrein = e.includes('Frein') || e.includes('Neutraliser les résistances') || e === 'U — Un frein';
+    var estSolution = e.includes('Solution à tester');
+    var estPreparation = e === 'Préparation';
+    if (estPetitPas || estFrein || estSolution || estPreparation) return;
+    detailsHtml += '<div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(245,240,232,.1)">'
+      + '<div style="font-size:12px;color:var(--or);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">' + escapeHtml(e) + '</div>'
+      + '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(a.reponse) + '</div>'
       + '</div>';
   });
-  document.getElementById('plan-checklist').innerHTML = html;
+  document.getElementById('plan-details').innerHTML = detailsHtml;
+  // Écran replié par défaut à chaque nouvel affichage du plan.
+  document.getElementById('plan-details').style.display = 'none';
+  document.getElementById('plan-details-toggle').textContent = 'Voir les autres éléments de mon plan ▾';
+}
+
+function togglePlanDetails() {
+  var el = document.getElementById('plan-details');
+  var toggle = document.getElementById('plan-details-toggle');
+  var isOpen = el.style.display !== 'none';
+  el.style.display = isOpen ? 'none' : 'block';
+  toggle.textContent = isOpen ? 'Voir les autres éléments de mon plan ▾' : 'Masquer ▴';
+}
+
+function savePreparation() {
+  var val = document.getElementById('plan-preparation-input').value.trim();
+  if (!val) return;
+  var btn = document.getElementById('btn-save-preparation');
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement...';
+  fetch('/api/save-configuration', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      code: code,
+      etape: 'Préparation',
+      question: "Qu'est-ce que tu peux préparer pour rendre cette action plus facile ?",
+      reponse: val,
+      cycleId: currentCycleId,
+    }),
+  })
+    .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+    .then(function(result) {
+      btn.disabled = false;
+      btn.textContent = 'Enregistrer';
+      if (!result.ok) {
+        alert(result.data.error || "Une erreur est survenue. Réessaie.");
+        return;
+      }
+      document.getElementById('plan-preparation-saved').style.display = 'inline';
+    })
+    .catch(function(e) {
+      btn.disabled = false;
+      btn.textContent = 'Enregistrer';
+      alert("Erreur réseau. Réessaie, ou préviens Franck si ça persiste.");
+      console.warn('Erreur savePreparation :', e);
+    });
 }
 
 // ═══════════════════════════════════════════════════════════
