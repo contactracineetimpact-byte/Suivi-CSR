@@ -146,6 +146,56 @@ export default async function handler(req, res) {
           return match ? match.fields['Réponse'] : null;
         };
 
+        // NOUVEAU (P1-5 bis) — Résolution fiable du petit pas actif, pour
+        // l'étape 'A — Agir' (ANCRAGE) ou celle contenant "Utiliser
+        // l'alternative" (RUPTURE). Remplace toute logique de "première
+        // correspondance" pour CETTE étape précise uniquement — les autres
+        // champs de checkinContext (signal, preuve, etc.) gardent leur
+        // résolution existante par findByEtape, inchangée.
+        //
+        // Règle de résolution (validée) :
+        //   1. Une ligne avec 'Statut du petit pas' = 'Actif' explicite → elle.
+        //   2. Aucun statut explicite nulle part, une seule ligne pour cette
+        //      étape → elle est l'actif implicite (rétrocompatibilité).
+        //   3. Aucun statut explicite, plusieurs lignes → la plus récente par
+        //      createdTime (fourni par Airtable, jamais ambigu) est l'actif
+        //      implicite ; les autres sont considérées remplacées.
+        // Cette résolution est une LECTURE uniquement — aucune écriture
+        // automatique n'est faite ici, même quand une ambiguïté historique
+        // est résolue par la règle 3.
+        function resolvePetitPas(etapePredicate) {
+          const lignes = ownAnswers.filter((r) => etapePredicate(r.fields['Étape'] || ''));
+          if (lignes.length === 0) return null;
+
+          const avecStatutActif = lignes.find((r) => {
+            const s = r.fields['Statut du petit pas'];
+            const sNom = typeof s === 'string' ? s : s && s.name;
+            return sNom === 'Actif';
+          });
+          if (avecStatutActif) {
+            return { reponse: avecStatutActif.fields['Réponse'], configId: avecStatutActif.id, statut: 'Actif' };
+          }
+
+          const sansStatut = lignes.filter((r) => !r.fields['Statut du petit pas']);
+          if (sansStatut.length === 1) {
+            return { reponse: sansStatut[0].fields['Réponse'], configId: sansStatut[0].id, statut: 'Actif (implicite)' };
+          }
+          if (sansStatut.length > 1) {
+            sansStatut.sort((a, b) => new Date(b.createdTime) - new Date(a.createdTime));
+            return { reponse: sansStatut[0].fields['Réponse'], configId: sansStatut[0].id, statut: 'Actif (implicite)' };
+          }
+
+          // Toutes les lignes ont un statut explicite, mais aucune n'est
+          // 'Actif' (cas limite : la dernière transition a échoué avant la
+          // création du nouveau petit pas — "partialFailure" côté
+          // save-configuration.js). On ne masque pas cette situation.
+          return null;
+        }
+
+        const petitPasAncrage = moteur === 'ANCRAGE' ? resolvePetitPas((e) => e === 'A — Agir') : null;
+        const petitPasRupture = moteur === 'RUPTURE' ? resolvePetitPas((e) => e.includes("Utiliser l'alternative")) : null;
+        const petitPas = petitPasAncrage || petitPasRupture;
+
         if (moteur === 'ANCRAGE') {
           checkinContext = {
             signal: findByEtape((e) => e.startsWith('C —') || e.startsWith('C -')),
@@ -160,6 +210,10 @@ export default async function handler(req, res) {
             preuve: findByEtape((e) => e.includes('Relever la preuve')),
           };
         }
+        // Ajouté séparément de checkinContext.action/.alternative existants
+        // (qui restent inchangés, utilisés ailleurs) — nouvelle donnée
+        // dédiée au modèle de petit pas, pour l'interface P1-5/P1-6 à venir.
+        if (checkinContext) checkinContext.petitPas = petitPas;
       }
     }
 
