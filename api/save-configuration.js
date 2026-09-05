@@ -138,9 +138,12 @@ export default async function handler(req, res) {
       if (newStatut !== 'Terminé' && newStatut !== 'Remplacé') {
         return res.status(400).json({ error: "newStatut doit être 'Terminé' ou 'Remplacé'." });
       }
-      if (!etape || !question || !nouvelleReponse) {
-        return res.status(400).json({ error: 'etape, question et nouvelleReponse sont requis pour une transition.' });
-      }
+      // NOUVEAU (P1-5) — etape/question/nouvelleReponse sont désormais
+      // optionnels. Absents : transition seule, aucune nouvelle ligne créée
+      // (c'est le cas utilisé par P1-5 — "terminer sans encore définir le
+      // prochain petit pas"). Présents : comportement d'origine (P1-5 bis)
+      // conservé à l'identique, pour les usages qui en ont besoin.
+      const creerNouveauPetitPas = !!(etape && question && nouvelleReponse);
 
       const targetUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${TABLE_CONFIG}/${configId}`;
       const targetRes = await fetch(targetUrl, { headers });
@@ -193,6 +196,13 @@ export default async function handler(req, res) {
       //    ligne ciblée est encore 'Actif' juste avant d'agir) reste en
       //    place et couvre le cas réel du double-clic/requêtes concurrentes
       //    sur LA MÊME ligne — signalé comme limite dans le rapport final.
+
+      if (!creerNouveauPetitPas) {
+        // Transition seule (P1-5) : la ligne ciblée est déjà marquée
+        // newStatut à l'étape 2 ci-dessus. On s'arrête ici volontairement —
+        // aucun nouveau petit pas n'est créé, P1-6 s'en chargera séparément.
+        return res.status(200).json({ success: true, mode: 'transition', configId: null });
+      }
 
       // 4. Créer le nouveau petit pas, 'Actif'.
       const newFields = {
