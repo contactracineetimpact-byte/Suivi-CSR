@@ -449,33 +449,85 @@ canvas{width:100%;height:100%}
   <div class="seance-wrap">
     <div class="top-bar" style="margin-bottom:20px">
       <div>
-        <div class="page-title">Qu'est-ce qu'on cherche à transformer ?</div>
-        <div class="page-sub">Avec Franck, déterminez ensemble ce qui correspond à ton besoin aujourd'hui.</div>
+        <div class="page-title" id="moteur-choice-title">Qu'est-ce que tu veux faire avancer ?</div>
+        <div class="page-sub" id="moteur-choice-sub">Avec Franck, identifiez ensemble ce que tu veux voir bouger.</div>
       </div>
       <button class="btn-ghost" onclick="goHub()" style="font-size:13px">⌂ Accueil</button>
     </div>
 
-    <div id="moteur-cards">
+    <!-- NOUVEAU (P1-1) — Étape 1 : l'objectif, avant tout choix de moteur. -->
+    <div id="objectif-step">
+      <div class="score-block">
+        <textarea class="just-input" id="objectif-step-input" placeholder="Ex : Faire avancer ma demande de nationalité française"></textarea>
+        <div class="field-err" id="objectif-step-err">Dis-nous en quelques mots ce que tu veux faire avancer.</div>
+      </div>
+      <button class="btn-ghost" onclick="goToMoteurCards()" style="width:100%;padding:14px;background:rgba(201,168,76,.12);border-color:var(--or)">Continuer →</button>
+    </div>
+
+    <!-- NOUVEAU (P1-1) — Étape 2 : Faire / Arrêter / Les deux, plus naturel
+         que de demander directement ANCRAGE ou RUPTURE. Le moteur reste
+         choisi en interne exactement comme avant. -->
+    <div id="moteur-cards" style="display:none">
+      <div style="font-size:13px;color:rgba(245,240,232,.55);margin-bottom:4px">
+        <a href="#" onclick="backToObjectifStep(); return false;" style="color:inherit">← Modifier mon objectif</a>
+      </div>
+      <div class="page-sub" style="margin:10px 0 16px">Pour ça, qu'est-ce qui doit se passer ?</div>
+
       <div class="score-block" style="cursor:pointer" onclick="selectMoteurPending('ANCRAGE')">
         <div class="score-block-name">
           <div class="score-dot" style="background:#8fbf8f"></div>
-          ANCRAGE
+          Faire quelque chose de nouveau
         </div>
         <div class="score-question" style="font-style:normal">
-          Installer quelque chose qui manque. Une action, une habitude ou un comportement que tu veux intégrer à ton système.
+          Installer une action, une habitude ou un comportement qui manque aujourd'hui.
         </div>
-        <button class="btn-ghost" style="width:100%;padding:12px;margin-top:8px;border-color:#8fbf8f;color:#8fbf8f">Choisir ANCRAGE</button>
+        <button class="btn-ghost" style="width:100%;padding:12px;margin-top:8px;border-color:#8fbf8f;color:#8fbf8f">Choisir</button>
       </div>
 
       <div class="score-block" style="cursor:pointer" onclick="selectMoteurPending('RUPTURE')">
         <div class="score-block-name">
           <div class="score-dot" style="background:#e0847e"></div>
-          RUPTURE
+          Arrêter quelque chose qui freine
         </div>
         <div class="score-question" style="font-style:normal">
-          Arrêter quelque chose qui te freine. Une habitude, une réaction ou un comportement automatique que tu veux interrompre.
+          Interrompre une habitude, une réaction ou un comportement automatique qui bloque.
         </div>
-        <button class="btn-ghost" style="width:100%;padding:12px;margin-top:8px;border-color:#e0847e;color:#e0847e">Choisir RUPTURE</button>
+        <button class="btn-ghost" style="width:100%;padding:12px;margin-top:8px;border-color:#e0847e;color:#e0847e">Choisir</button>
+      </div>
+
+      <div class="score-block" style="cursor:pointer" onclick="selectLesDeux()">
+        <div class="score-block-name">
+          <div class="score-dot" style="background:#c9a84c"></div>
+          Les deux
+        </div>
+        <div class="score-question" style="font-style:normal">
+          Il faut probablement installer quelque chose ET arrêter quelque chose. On commence par le plus urgent des deux.
+        </div>
+        <button class="btn-ghost" style="width:100%;padding:12px;margin-top:8px;border-color:#c9a84c;color:#c9a84c">Choisir</button>
+      </div>
+    </div>
+
+    <!-- NOUVEAU (P1-1) — Sous-étape si "Les deux" : lequel est prioritaire. -->
+    <div id="deux-choice" style="display:none">
+      <div style="font-size:13px;color:rgba(245,240,232,.55);margin-bottom:4px">
+        <a href="#" onclick="backToMoteurCards(); return false;" style="color:inherit">← Revenir</a>
+      </div>
+      <div class="page-sub" style="margin:10px 0 16px">Lequel des deux te semble le plus urgent à traiter en premier ?</div>
+
+      <div class="score-block" style="cursor:pointer" onclick="selectUrgentAxe('ANCRAGE')">
+        <div class="score-block-name">
+          <div class="score-dot" style="background:#8fbf8f"></div>
+          Faire quelque chose de nouveau, d'abord
+        </div>
+        <button class="btn-ghost" style="width:100%;padding:12px;margin-top:8px;border-color:#8fbf8f;color:#8fbf8f">Choisir</button>
+      </div>
+
+      <div class="score-block" style="cursor:pointer" onclick="selectUrgentAxe('RUPTURE')">
+        <div class="score-block-name">
+          <div class="score-dot" style="background:#e0847e"></div>
+          Arrêter quelque chose, d'abord
+        </div>
+        <button class="btn-ghost" style="width:100%;padding:12px;margin-top:8px;border-color:#e0847e;color:#e0847e">Choisir</button>
       </div>
     </div>
 
@@ -485,8 +537,14 @@ canvas{width:100%;height:100%}
       <div class="score-block">
         <div class="score-block-name" id="confirm-title"></div>
         <div class="score-question" id="confirm-desc" style="font-style:normal"></div>
-        <div class="just-label" style="margin-top:10px">Objectif <span class="required">Obligatoire</span></div>
-        <textarea class="just-input" id="confirm-objectif" placeholder="Qu'est-ce que tu veux obtenir concrètement d'ici 60 jours ?"></textarea>
+        <!-- NOUVEAU (P1-1) — l'objectif a déjà été saisi à l'étape 1 ; on
+             l'affiche en rappel, on ne le redemande plus. Le champ original
+             (#confirm-objectif) reste dans le DOM, cette fois masqué et
+             pré-rempli, pour que confirmMoteurChoice() continue de
+             fonctionner sans aucune modification de son code. -->
+        <div class="just-label" style="margin-top:10px">Ton objectif</div>
+        <div id="confirm-objectif-display" style="font-size:14px;color:var(--creme);padding:11px 14px;background:rgba(245,240,232,.04);border:1.5px solid rgba(245,240,232,.1);border-radius:6px;line-height:1.5"></div>
+        <textarea class="just-input" id="confirm-objectif" style="display:none"></textarea>
         <div class="field-err" id="confirm-objectif-err">Ce champ est obligatoire.</div>
         <div style="display:flex;gap:10px;margin-top:14px">
           <button class="btn-ghost" onclick="cancelMoteurChoice()" style="flex:1;padding:12px">← Revenir</button>
@@ -1924,6 +1982,10 @@ var currentMoteur = null;
 var currentExperienceId = null;
 
 var pendingMoteur = null;
+// NOUVEAU (P1-1) — objectif saisi avant le choix Faire/Arrêter/Les deux,
+// stocké ici le temps du parcours, puis transmis tel quel (ou complété
+// d'une note sur l'autre axe si "Les deux") au champ objectif existant.
+var pendingObjectif = '';
 // NOUVEAU (30/08/2026) — Modèle multi-cycle, Chantier 3.
 // true pendant la préparation d'un nouveau cycle pour une expérience déjà
 // verrouillée (bouton "Continuer cette expérience" depuis l'État D) — fait
@@ -1948,8 +2010,13 @@ function openQuestionnaire() {
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (!data.hasExperience) {
-        // Aucune expérience : le client choisit son moteur, guidé par Franck.
-        document.getElementById('moteur-cards').style.display = 'block';
+        // Aucune expérience : le client commence par son objectif (P1-1),
+        // puis choisit Faire/Arrêter/Les deux, guidé par Franck.
+        document.getElementById('objectif-step-input').value = '';
+        document.getElementById('objectif-step-err').style.display = 'none';
+        document.getElementById('objectif-step').style.display = 'block';
+        document.getElementById('moteur-cards').style.display = 'none';
+        document.getElementById('deux-choice').style.display = 'none';
         document.getElementById('moteur-confirm').style.display = 'none';
         showScreen('s-moteur-choice');
         return;
@@ -1979,15 +2046,62 @@ function openQuestionnaire() {
     });
 }
 
+function goToMoteurCards() {
+  var input = document.getElementById('objectif-step-input');
+  var err = document.getElementById('objectif-step-err');
+  var val = input.value.trim();
+  if (!val || val.length < 3) {
+    input.classList.add('error');
+    err.style.display = 'block';
+    return;
+  }
+  input.classList.remove('error');
+  err.style.display = 'none';
+  pendingObjectif = val;
+  document.getElementById('objectif-step').style.display = 'none';
+  document.getElementById('moteur-cards').style.display = 'block';
+}
+
+function backToObjectifStep() {
+  document.getElementById('moteur-cards').style.display = 'none';
+  document.getElementById('objectif-step').style.display = 'block';
+}
+
+function backToMoteurCards() {
+  document.getElementById('deux-choice').style.display = 'none';
+  document.getElementById('moteur-cards').style.display = 'block';
+}
+
+function selectLesDeux() {
+  document.getElementById('moteur-cards').style.display = 'none';
+  document.getElementById('deux-choice').style.display = 'block';
+}
+
+function selectUrgentAxe(moteurChoisi) {
+  // NOUVEAU (P1-1) — "Les deux" : on démarre sur l'axe le plus urgent, et on
+  // garde une simple trace texte de l'autre axe dans l'objectif — pas de
+  // deuxième expérience créée, pas de nouvelle donnée structurée.
+  var autreLabel = moteurChoisi === 'ANCRAGE'
+    ? "arrêter ce qui freine"
+    : "mettre en place ce qui manque";
+  pendingObjectif = pendingObjectif + '\n\n(À traiter aussi, au prochain cycle : ' + autreLabel + '.)';
+  document.getElementById('deux-choice').style.display = 'none';
+  selectMoteurPending(moteurChoisi);
+}
+
 function selectMoteurPending(moteur) {
   pendingMoteur = moteur;
   var isAncrage = moteur === 'ANCRAGE';
   document.getElementById('confirm-title').innerHTML =
-    '<div class="score-dot" style="background:' + (isAncrage ? '#8fbf8f' : '#e0847e') + '"></div>Tu as choisi ' + moteur;
+    '<div class="score-dot" style="background:' + (isAncrage ? '#8fbf8f' : '#e0847e') + '"></div>Tu as choisi ' + (isAncrage ? 'de faire quelque chose de nouveau' : "d'arrêter ce qui freine");
   document.getElementById('confirm-desc').textContent = isAncrage
     ? 'Nous allons donc construire une action nouvelle à intégrer à ton système.'
     : 'Nous allons donc construire un système pour interrompre cette habitude.';
-  document.getElementById('confirm-objectif').value = '';
+  // NOUVEAU (P1-1) — l'objectif a déjà été saisi à l'étape 1 (pendingObjectif).
+  // On l'affiche en lecture seule, et on pré-remplit le champ caché que
+  // confirmMoteurChoice() lit déjà, sans modifier cette fonction.
+  document.getElementById('confirm-objectif-display').textContent = pendingObjectif;
+  document.getElementById('confirm-objectif').value = pendingObjectif;
   document.getElementById('confirm-objectif-err').style.display = 'none';
   document.getElementById('moteur-cards').style.display = 'none';
   document.getElementById('moteur-confirm').style.display = 'block';
@@ -2179,7 +2293,11 @@ function openChangeExperienceFlow() {
   consoliderAncienneApresCreation = true;
   preparingNextCycle = false;
   pendingMoteur = null;
-  document.getElementById('moteur-cards').style.display = 'block';
+  document.getElementById('objectif-step-input').value = '';
+  document.getElementById('objectif-step-err').style.display = 'none';
+  document.getElementById('objectif-step').style.display = 'block';
+  document.getElementById('moteur-cards').style.display = 'none';
+  document.getElementById('deux-choice').style.display = 'none';
   document.getElementById('moteur-confirm').style.display = 'none';
   showScreen('s-moteur-choice');
 }
