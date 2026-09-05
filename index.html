@@ -2039,21 +2039,21 @@ var QUESTIONS_ANCRAGE = [
   { id: 'A1', lettre: 'A', titre: 'Ambition', question: "Qu'est-ce que tu veux obtenir concrètement d'ici 60 jours ?" },
   { id: 'N1', lettre: 'N', titre: 'Frein', question: "Qu'est-ce qui risque de t'empêcher de faire cette action ?" },
   { id: 'N2', lettre: 'N', titre: 'Solution à tester', question: "Que peux-tu mettre en place pour rendre cette action plus facile malgré ce frein ?" },
-  { id: 'C1', lettre: 'C', titre: 'Connecter (signal émotionnel)', titreDisplay: 'Connecter', question: "Quelle émotion, sensation ou tension intérieure apparaît juste avant que tu aies tendance à rester dans ton ancien fonctionnement ? (Un contexte comme \"après le café\" peut t'aider à le repérer, mais ce n'est pas la réponse — nomme l'émotion ou la sensation.)" },
-  { id: 'R1', lettre: 'R', titre: 'Représenter', question: "Imagine-toi au moment de commencer : que fais-tu exactement, et comment te sens-tu juste après ?" },
+  { id: 'C1', lettre: 'C', titre: 'Connecter (signal émotionnel)', titreDisplay: 'Connecter', question: "Qu'est-ce que tu ressens juste avant de faire cette action ?", aide: "Une émotion, une sensation ou une tension. Ex. : stress, fatigue, hésitation." },
+  { id: 'R1', lettre: 'R', titre: 'Représenter', question: "Décris le moment où tu commences l'action.", aide: "Ce que tu fais, ce que tu vois, ce que tu ressens." },
   { id: 'A2', lettre: 'A', titre: 'Agir', question: "Quelle est la plus petite action qui constitue un vrai progrès ?" },
-  { id: 'G1', lettre: 'G', titre: 'Garder la preuve', question: "Comment vas-tu constater, chaque jour, que tu l'as fait ?" },
+  { id: 'G1', lettre: 'G', titre: 'Garder la preuve', question: "Comment vas-tu voir que tu l'as fait ?", aide: "Une case cochée, un document obtenu, une action réalisée, un nombre atteint…" },
 ];
 
 var QUESTIONS_RUPTURE = [
   { id: 'R1', lettre: 'R', titre: 'Résultat recherché', question: "Qu'est-ce que tu veux pouvoir faire ou vivre à la place de cette habitude ?" },
   { id: 'U1', lettre: 'U', titre: 'Frein', question: "Qu'est-ce qui risque de te faire retomber dans l'ancien automatisme ?" },
   { id: 'U1s', lettre: 'U', titre: 'Solution à tester', question: "Que peux-tu tester pour réagir autrement lorsque ce frein apparaît ?" },
-  { id: 'P1', lettre: 'P', titre: 'Percevoir le signal (émotion)', titreDisplay: 'Ce qui se passe juste avant (émotion)', question: "Quelle émotion, sensation ou tension intérieure annonce que l'habitude est sur le point de commencer ?" },
+  { id: 'P1', lettre: 'P', titre: 'Percevoir le signal (émotion)', titreDisplay: 'Ce qui se passe juste avant (émotion)', question: "Qu'est-ce que tu ressens juste avant de retomber dans ton ancien automatisme ?", aide: "Ex. : stress, ennui, tension, envie, fatigue." },
   { id: 'P2', lettre: 'P', titre: "Percevoir le signal (ancien automatisme)", titreDisplay: "Ce qui se passe juste avant (ancien automatisme)", question: "Concrètement, qu'est-ce que tu fais dans ce cas précis — le comportement exact que tu veux interrompre ?" },
   { id: 'T1', lettre: 'T', titre: 'Transformer la réponse (avec charge équivalente)', question: "Si ça se reproduit, quelle réponse veux-tu avoir à la place ?" },
   { id: 'U2', lettre: 'U', titre: "Utiliser l'alternative", question: "Quelle est la plus petite action qui te permet d'interrompre le cycle ?" },
-  { id: 'R2', lettre: 'R', titre: 'Relever la preuve', question: "Comment vas-tu noter, chaque jour, si tu as intercepté ou non ?" },
+  { id: 'R2', lettre: 'R', titre: 'Relever la preuve', question: "Comment vas-tu voir que tu as réussi à interrompre l'automatisme ?", aide: "Un geste différent, une action réalisée, une situation évitée…" },
 ];
 
 var currentMoteur = null;
@@ -2295,6 +2295,7 @@ function renderQuestionnaire(moteur) {
       + '<div class="score-block-name"><div class="score-dot" style="background:' + color + '"></div>'
       + q.lettre + ' — ' + (q.titreDisplay || q.titre) + '</div>'
       + '<div class="score-question">' + q.question + '</div>'
+      + (q.aide ? '<div style="font-size:12px;color:rgba(245,240,232,.5);font-style:italic;margin:-6px 0 10px">' + escapeHtml(q.aide) + '</div>' : '')
       + '<textarea class="just-input" id="qa-' + q.id + '" placeholder="Ta réponse..."></textarea>'
       + '<div class="field-err" id="qerr-' + q.id + '">Ce champ est obligatoire.</div>'
       + '</div>';
@@ -2427,7 +2428,7 @@ function renderCyclePrepForm(moteur, objectif, checkinContext) {
   // Bloc(s) Signal — un pour ANCRAGE, deux pour RUPTURE (émotion + ancien
   // automatisme). Chacun affiche le texte hérité, avec un bouton
   // "Modifier" qui révèle une zone de saisie pré-remplie.
-  function signalBlock(etapeId, titre, question, valeurHeritee) {
+  function signalBlock(etapeId, titre, question, valeurHeritee, aide) {
     cyclePrepSignalValues[etapeId] = valeurHeritee || '';
     cyclePrepSignalModified[etapeId] = false;
     return '<div class="score-block">'
@@ -2437,13 +2438,14 @@ function renderCyclePrepForm(moteur, objectif, checkinContext) {
       + '<button type="button" class="btn-ghost" id="cp-signal-btn-' + etapeId + '" onclick="cpToggleSignalEdit(\'' + etapeId + '\')" style="font-size:11px;padding:7px 12px">Modifier</button>'
       + '<div id="cp-signal-edit-' + etapeId + '" style="display:none;margin-top:10px">'
       + '<div class="score-question" style="font-style:normal;margin-bottom:8px">' + escapeHtml(question) + '</div>'
+      + (aide ? '<div style="font-size:12px;color:rgba(245,240,232,.5);font-style:italic;margin:-4px 0 8px">' + escapeHtml(aide) + '</div>' : '')
       + '<textarea class="just-input" id="cp-signal-input-' + etapeId + '">' + escapeHtml(valeurHeritee || '') + '</textarea>'
       + '</div>'
       + '</div>';
   }
 
   if (moteur === 'ANCRAGE') {
-    html += signalBlock('C1', 'Ce qui déclenche', "Quelle émotion, sensation ou tension intérieure apparaît juste avant que tu aies tendance à rester dans ton ancien fonctionnement ?", checkinContext && checkinContext.signal);
+    html += signalBlock('C1', 'Ce qui déclenche', "Qu'est-ce que tu ressens juste avant de faire cette action ?", checkinContext && checkinContext.signal, "Une émotion, une sensation ou une tension. Ex. : stress, fatigue, hésitation.");
 
     html += '<div class="score-block">'
       + '<div class="score-block-name">Ce que je teste maintenant</div>'
@@ -2466,7 +2468,7 @@ function renderCyclePrepForm(moteur, objectif, checkinContext) {
       + '<div class="field-err" id="cp-solution-err">Ce champ est obligatoire.</div>'
       + '</div>';
   } else if (moteur === 'RUPTURE') {
-    html += signalBlock('P1', 'Ce qui se passe juste avant', "Quelle émotion, sensation ou tension intérieure annonce que l'habitude est sur le point de commencer ?", checkinContext && checkinContext.signal);
+    html += signalBlock('P1', 'Ce qui se passe juste avant', "Qu'est-ce que tu ressens juste avant de retomber dans ton ancien automatisme ?", checkinContext && checkinContext.signal, "Ex. : stress, ennui, tension, envie, fatigue.");
     html += signalBlock('P2', 'Ancien automatisme', "Concrètement, qu'est-ce que tu fais dans ce cas précis — le comportement exact que tu veux interrompre ?", checkinContext && checkinContext.ancienComportement);
 
     html += '<div class="score-block">'
@@ -2497,7 +2499,8 @@ function renderCyclePrepForm(moteur, objectif, checkinContext) {
 
     html += '<div class="score-block">'
       + '<div class="score-block-name">Preuve</div>'
-      + '<div class="score-question">Comment vas-tu noter, chaque jour, si tu as intercepté ou non ?</div>'
+      + '<div class="score-question">Comment vas-tu voir que tu as réussi à interrompre l\'automatisme ?</div>'
+      + '<div style="font-size:12px;color:rgba(245,240,232,.5);font-style:italic;margin:-6px 0 10px">Un geste différent, une action réalisée, une situation évitée…</div>'
       + '<textarea class="just-input" id="cp-preuve" placeholder="Ta réponse..."></textarea>'
       + '<div class="field-err" id="cp-preuve-err">Ce champ est obligatoire.</div>'
       + '</div>';
@@ -2555,7 +2558,7 @@ function submitCyclePrep() {
   if (moteur === 'ANCRAGE') {
     answers.push({
       etape: 'C — Connecter (signal émotionnel)',
-      question: "Quelle émotion, sensation ou tension intérieure apparaît juste avant que tu aies tendance à rester dans ton ancien fonctionnement ?",
+      question: "Qu'est-ce que tu ressens juste avant de faire cette action ?",
       reponse: resolveSignal('C1'),
     });
     var actionPreuve = validateField('cp-action-preuve', 'cp-action-preuve-err');
@@ -2570,13 +2573,13 @@ function submitCyclePrep() {
     // fusion demandée se traduit ici par une réponse identique aux deux
     // questions, pour ne rien casser côté checkinContext.
     answers.push({ etape: 'A — Agir', question: "Quelle est la plus petite action qui constitue un vrai progrès ?", reponse: actionPreuve });
-    answers.push({ etape: 'G — Garder la preuve', question: "Comment vas-tu constater, chaque jour, que tu l'as fait ?", reponse: actionPreuve });
+    answers.push({ etape: 'G — Garder la preuve', question: "Comment vas-tu voir que tu l'as fait ?", reponse: actionPreuve });
     answers.push({ etape: 'N — Frein', question: "Qu'est-ce qui risque de t'empêcher de faire cette action ?", reponse: frein });
     answers.push({ etape: 'N — Solution à tester', question: "Que peux-tu mettre en place pour rendre cette action plus facile malgré ce frein ?", reponse: solution });
   } else if (moteur === 'RUPTURE') {
     answers.push({
       etape: 'P — Percevoir le signal (émotion)',
-      question: "Quelle émotion, sensation ou tension intérieure annonce que l'habitude est sur le point de commencer ?",
+      question: "Qu'est-ce que tu ressens juste avant de retomber dans ton ancien automatisme ?",
       reponse: resolveSignal('P1'),
     });
     answers.push({
@@ -2597,7 +2600,7 @@ function submitCyclePrep() {
     answers.push({ etape: "U — Utiliser l'alternative", question: "Quelle est la plus petite action qui te permet d'interrompre le cycle ?", reponse: utiliser });
     answers.push({ etape: 'U — Frein', question: "Qu'est-ce qui risque de te faire retomber dans l'ancien automatisme ?", reponse: frein });
     answers.push({ etape: 'U — Solution à tester', question: "Que peux-tu tester pour réagir autrement lorsque ce frein apparaît ?", reponse: solution });
-    answers.push({ etape: 'R — Relever la preuve', question: "Comment vas-tu noter, chaque jour, si tu as intercepté ou non ?", reponse: preuve });
+    answers.push({ etape: 'R — Relever la preuve', question: "Comment vas-tu voir que tu as réussi à interrompre l'automatisme ?", reponse: preuve });
   }
 
   var btn = document.getElementById('btn-submit-quest');
