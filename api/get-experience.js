@@ -196,6 +196,41 @@ export default async function handler(req, res) {
         const petitPasRupture = moteur === 'RUPTURE' ? resolvePetitPas((e) => e.includes("Utiliser l'alternative")) : null;
         const petitPas = petitPasAncrage || petitPasRupture;
 
+        // NOUVEAU (Chantier B, priorité 1) — Uniquement quand aucun petit
+        // pas n'est Actif (état transitoire, juste après une terminaison) :
+        // retrouve le petit pas le plus récemment Terminé/Remplacé pour
+        // cette étape, et la note "ce qui s'est passé" la plus récente,
+        // par createdTime — même logique de tri que la résolution
+        // ci-dessus, jamais une déduction ou une reformulation du texte du
+        // client. Calculé en LECTURE seule, aucune écriture, aucune
+        // nouvelle donnée créée.
+        let dernierPetitPasTermine = null;
+        let ceQuiSestPasse = null;
+        if (!petitPas) {
+          const etapePetitPasPredicate = moteur === 'ANCRAGE'
+            ? (e) => e === 'A — Agir'
+            : (e) => e.includes("Utiliser l'alternative");
+          const lignesResolues = ownAnswers
+            .filter((r) => etapePetitPasPredicate(r.fields['Étape'] || ''))
+            .filter((r) => {
+              const s = r.fields['Statut du petit pas'];
+              const sNom = typeof s === 'string' ? s : s && s.name;
+              return sNom === 'Terminé' || sNom === 'Remplacé';
+            });
+          if (lignesResolues.length > 0) {
+            lignesResolues.sort((a, b) => new Date(b.createdTime) - new Date(a.createdTime));
+            dernierPetitPasTermine = { reponse: lignesResolues[0].fields['Réponse'] || null };
+          }
+
+          const lignesNarratives = ownAnswers.filter(
+            (r) => (r.fields['Étape'] || '') === "Petit pas terminé — ce qui s'est passé"
+          );
+          if (lignesNarratives.length > 0) {
+            lignesNarratives.sort((a, b) => new Date(b.createdTime) - new Date(a.createdTime));
+            ceQuiSestPasse = { reponse: lignesNarratives[0].fields['Réponse'] || null };
+          }
+        }
+
         if (moteur === 'ANCRAGE') {
           checkinContext = {
             signal: findByEtape((e) => e.startsWith('C —') || e.startsWith('C -')),
@@ -213,7 +248,11 @@ export default async function handler(req, res) {
         // Ajouté séparément de checkinContext.action/.alternative existants
         // (qui restent inchangés, utilisés ailleurs) — nouvelle donnée
         // dédiée au modèle de petit pas, pour l'interface P1-5/P1-6 à venir.
-        if (checkinContext) checkinContext.petitPas = petitPas;
+        if (checkinContext) {
+          checkinContext.petitPas = petitPas;
+          checkinContext.dernierPetitPasTermine = dernierPetitPasTermine;
+          checkinContext.ceQuiSestPasse = ceQuiSestPasse;
+        }
       }
     }
 
