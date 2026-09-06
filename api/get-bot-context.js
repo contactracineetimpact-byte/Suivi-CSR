@@ -30,12 +30,7 @@ export default async function handler(req, res) {
   }
 
   if (req.query.secret !== process.env.BOT_CONTEXT_SECRET) {
-    return res.status(401).json({
-      error: 'Non autorisé',
-      debug_secretRecu: req.query.secret || null,
-      debug_secretAttenduExiste: !!process.env.BOT_CONTEXT_SECRET,
-      debug_secretAttenduLongueur: process.env.BOT_CONTEXT_SECRET ? process.env.BOT_CONTEXT_SECRET.length : 0,
-    });
+    return res.status(401).json({ error: 'Non autorisé' });
   }
 
   try {
