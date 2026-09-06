@@ -278,15 +278,21 @@ canvas{width:100%;height:100%}
       <span style="cursor:pointer" onclick="openQuestionnaire()">Mon plan</span>
     </div>
 
-    <!-- NOUVEAU (30/08/2026, Chantier 9) + (31/08/2026, Chantier 17) — "Tes
-         preuves" et l'aperçu de "Mon miroir", regroupés dans UN seul bloc
-         visuel secondaire (Chantier 18) plutôt que deux cartes distinctes
-         du même poids que l'action principale. Remplis par
-         renderHubBadges() (même fetch déjà en place). Le conteneur reste
-         masqué tant qu'aucun des deux n'a de contenu réel. -->
+    <!-- NOUVEAU (Chantier B, priorité 2) — "Mon miroir" a désormais sa
+         propre carte, distincte de "Tes preuves", avec une bordure or
+         discrète cohérente avec le traitement déjà utilisé pour le petit
+         pas actuel. Reste masquée entièrement (pas de carte vide) tant
+         qu'aucune évolution réelle n'existe — condition indépendante de
+         "Tes preuves" désormais. Contenu rempli par renderHubBadges(),
+         texte inchangé. -->
+    <div id="home-miroir" class="score-block" style="display:none;border-color:rgba(201,168,76,.45)"></div>
+
+    <!-- NOUVEAU (30/08/2026, Chantier 9) — "Tes preuves", désormais seule
+         dans ce conteneur secondaire depuis que "Mon miroir" a sa propre
+         carte (Chantier B, priorité 2). Masqué tant qu'il n'a pas de
+         contenu réel. -->
     <div id="home-secondaire" style="display:none;background:rgba(245,240,232,.04);border:1px solid rgba(245,240,232,.1);border-radius:8px;padding:14px 16px;margin-bottom:16px">
       <div id="home-preuves"></div>
-      <div id="home-miroir"></div>
     </div>
 
     <!-- Scores mini -->
@@ -1062,7 +1068,7 @@ function renderHubBadges() {
   var elSecondaire = document.getElementById('home-secondaire');
   if (elHub) elHub.style.display = 'none';
   if (elHome) { elHome.innerHTML = ''; }
-  if (elMiroir) { elMiroir.innerHTML = ''; }
+  if (elMiroir) { elMiroir.innerHTML = ''; elMiroir.style.display = 'none'; }
   if (elSecondaire) elSecondaire.style.display = 'none';
 
   fetch('/api/get-experience?code=' + encodeURIComponent(code) + '&_=' + Date.now(), { cache: 'no-store' })
@@ -1080,6 +1086,10 @@ function renderHubBadges() {
           // et plus fréquemment disponible que l'objectif, qui n'est
           // presque jamais réécrit après le premier cycle — Chantier 10).
           // Rien n'est affiché si aucune évolution réelle n'existe.
+          //
+          // MIS À JOUR (Chantier B, priorité 2) — carte indépendante de
+          // "Tes preuves" : affichage/masquage décidés uniquement par la
+          // présence d'une évolution réelle, plus de logique partagée.
           if (elMiroir) {
             var evolutions = cycleData && cycleData.evolutions || [];
             var evoAPrevisualiser = evolutions.find(function(ev) { return ev.label === 'action'; }) || evolutions.find(function(ev) { return ev.label === 'objectif'; });
@@ -1090,6 +1100,9 @@ function renderHubBadges() {
                 + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(245,240,232,.5);margin-bottom:2px">Aujourd\'hui</div>'
                 + '<div style="font-size:13px;color:var(--creme);line-height:1.5;margin-bottom:10px">« ' + escapeHtml(evoAPrevisualiser.derniereReponse) + ' »</div>'
                 + '<div style="font-size:12px;color:var(--or);cursor:pointer" onclick="showNav(\'tableau\')">→ Voir mon parcours</div>';
+              elMiroir.style.display = 'block';
+            } else {
+              elMiroir.style.display = 'none';
             }
           }
 
@@ -1114,21 +1127,13 @@ function renderHubBadges() {
             if (elHome) { elHome.innerHTML = htmlPreuves; }
           }
 
-          // NOUVEAU (01/09/2026) — Chantier 18 : "Tes preuves" et "Mon
-          // miroir" partagent désormais un seul conteneur visuel
-          // (#home-secondaire), révélé uniquement si l'un des deux a
-          // réellement du contenu — jamais un bloc vide. Un séparateur
-          // n'est ajouté qu'entre les deux quand ils sont présents
-          // ensemble.
+          // MIS À JOUR (Chantier B, priorité 2) — "Tes preuves" est
+          // désormais seul dans #home-secondaire (le miroir a sa propre
+          // carte, gérée indépendamment ci-dessus). Masqué tant qu'il n'a
+          // pas de contenu réel — jamais un bloc vide.
           if (elSecondaire) {
             var aPreuves = elHome && elHome.innerHTML;
-            var aMiroir = elMiroir && elMiroir.innerHTML;
-            if (aPreuves && aMiroir) {
-              elMiroir.style.cssText = 'margin-top:14px;padding-top:14px;border-top:1px solid rgba(245,240,232,.1)';
-            } else {
-              elMiroir.style.cssText = '';
-            }
-            if (aPreuves || aMiroir) elSecondaire.style.display = 'block';
+            if (aPreuves) elSecondaire.style.display = 'block';
           }
         });
     })
