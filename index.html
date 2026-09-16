@@ -47,6 +47,13 @@ body{font-family:'Barlow',sans-serif;color:var(--creme);min-height:100vh;font-si
 
 /* Carte action du jour */
 .action-card{background:rgba(245,240,232,.05);border:1.5px solid rgba(245,240,232,.14);border-radius:12px;padding:24px;margin-bottom:16px}
+/* CHANTIER UX 2 — États de transition du parcours (démarrage, bilan
+   attendu, cycle clos, en pause), visuellement distincts du flux normal
+   d'action quotidienne (.action-card ci-dessus). Fond plus neutre,
+   bordure plus discrète — pour que l'œil comprenne immédiatement qu'il
+   s'agit d'une étape du parcours, pas de l'action du jour. */
+.transition-card{background:rgba(245,240,232,.03);border:1.5px solid rgba(245,240,232,.10);border-radius:12px;padding:24px;margin-bottom:16px}
+.transition-eyebrow-parcours{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(245,240,232,.4);margin-bottom:6px}
 .action-eyebrow{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--or);margin-bottom:12px}
 .action-question{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:700;color:var(--creme);line-height:1.25;margin-bottom:16px}
 .action-input{width:100%;padding:12px 14px;background:rgba(245,240,232,.055);border:1.5px solid rgba(245,240,232,.14);color:var(--creme);font-family:'Barlow',sans-serif;font-size:15px;border-radius:6px;outline:none;resize:none;min-height:80px;transition:border-color .2s;line-height:1.5}
@@ -3694,7 +3701,8 @@ function renderContextualBanner() {
         // État A — aucune expérience active.
         el.style.display = 'block';
         el.innerHTML =
-          '<div class="action-card" style="border-color:rgba(201,168,76,.35)">'
+          '<div class="transition-card" style="border-color:rgba(201,168,76,.35)">'
+          + '<div class="transition-eyebrow-parcours">Ton parcours</div>'
           + '<div class="action-eyebrow">Prochaine étape</div>'
           + '<div class="action-question" style="font-size:20px">Ton parcours commence ici.</div>'
           + '<div style="font-size:14px;color:rgba(245,240,232,.7);line-height:1.6;margin:8px 0 16px">'
@@ -3723,7 +3731,8 @@ function renderContextualBanner() {
         // que l'état A, pour finir la configuration.
         el.style.display = 'block';
         el.innerHTML =
-          '<div class="action-card" style="border-color:rgba(201,168,76,.35)">'
+          '<div class="transition-card" style="border-color:rgba(201,168,76,.35)">'
+          + '<div class="transition-eyebrow-parcours">Ton parcours</div>'
           + '<div class="action-eyebrow">Prochaine étape</div>'
           + '<div class="action-question" style="font-size:20px">Termine la construction de ton expérience.</div>'
           + '<button class="btn-engage" onclick="openQuestionnaire()">Continuer →</button>'
@@ -3742,7 +3751,8 @@ function renderContextualBanner() {
           if (cycleTermine) {
             // État C — cycle terminé, bilan attendu. Priorité sur le quotidien.
             el.innerHTML =
-              '<div class="action-card" style="border-color:rgba(224,132,126,.4)">'
+              '<div class="transition-card" style="border-color:rgba(224,132,126,.4)">'
+              + '<div class="transition-eyebrow-parcours">Ton parcours</div>'
               + '<div class="action-eyebrow">Ton expérience est terminée</div>'
               + '<div class="action-question" style="font-size:20px">Il est temps de regarder ce que tes données montrent.</div>'
               + '<button class="btn-engage" onclick="openBilan()">Faire le bilan →</button>'
@@ -3773,7 +3783,8 @@ function renderContextualBanner() {
             // simplement "terminée".
             if (expData.statut === 'En pause') {
               el.innerHTML =
-                '<div class="action-card">'
+                '<div class="transition-card">'
+                + '<div class="transition-eyebrow-parcours">Ton parcours</div>'
                 + '<div class="action-eyebrow">Expérience en pause</div>'
                 + '<div class="action-question" style="font-size:19px">' + escapeHtml(expData.nomExperience || expData.objectif || 'Cette expérience') + '</div>'
                 + '<div style="font-size:14px;color:rgba(245,240,232,.7);line-height:1.6;margin-top:6px">Cette expérience est actuellement en pause.</div>'
@@ -3791,7 +3802,8 @@ function renderContextualBanner() {
             }
 
             el.innerHTML =
-              '<div class="action-card">'
+              '<div class="transition-card">'
+              + '<div class="transition-eyebrow-parcours">Ton parcours</div>'
               + '<div class="action-eyebrow">Ce cycle est terminé</div>'
               + '<div class="action-question" style="font-size:19px">' + escapeHtml(cycleData.nomCycle || 'Ton cycle') + ' est clos.</div>'
               + (decision
