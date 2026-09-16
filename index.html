@@ -1020,7 +1020,10 @@ function goHub() {
   renderHubHint();
   renderHubTimeline();
   renderHubBadges();
-  showScreen('s-hub');
+  // Chantier UX 1 — s-hub sort du parcours client : ce bouton ramène
+  // désormais vers s-home, seul écran d'accueil. s-hub reste dans le code,
+  // simplement plus jamais affiché depuis ce point d'entrée.
+  showScreen('s-home');
 }
 
 function computeStreak() {
