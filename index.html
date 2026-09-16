@@ -629,13 +629,8 @@ canvas{width:100%;height:100%}
       <button class="btn-ghost" onclick="goHub()" style="font-size:13px">⌂ Accueil</button>
     </div>
 
-    <!-- NOUVEAU (P1-4) — Objectif, discret, juste pour le contexte. -->
-    <div class="score-block" id="plan-objectif" style="display:none">
-      <div class="score-block-name" style="margin-bottom:4px">Ton objectif</div>
-      <div style="font-size:14px;color:var(--creme);line-height:1.5" id="plan-objectif-text"></div>
-    </div>
-
-    <!-- NOUVEAU (P1-4) — Le petit pas, seul élément vraiment mis en avant. -->
+    <!-- NOUVEAU (P1-4) — Le petit pas, seul élément vraiment mis en avant.
+         INCHANGÉ dans ce chantier — bloc doré non touché, comme demandé. -->
     <div class="score-block" style="border-color:rgba(201,168,76,.45);background:rgba(201,168,76,.06)">
       <div class="action-eyebrow">Ton prochain petit pas</div>
       <div class="action-question" style="font-size:20px" id="plan-petit-pas-text"></div>
@@ -691,36 +686,57 @@ canvas{width:100%;height:100%}
       </div>
     </div>
 
-    <div class="score-block" id="plan-frein-block" style="display:none">
-      <div class="score-block-name" style="margin-bottom:4px">Ce qui pourrait te bloquer</div>
-      <div style="font-size:14px;color:var(--creme);line-height:1.5" id="plan-frein-text"></div>
-    </div>
-
-    <div class="score-block" id="plan-solution-block" style="display:none">
-      <div class="score-block-name" style="margin-bottom:4px">Ce que tu vas tester</div>
-      <div style="font-size:14px;color:var(--creme);line-height:1.5" id="plan-solution-text"></div>
-    </div>
-
-    <!-- NOUVEAU (P1-4) — Préparation légère, facultative, jamais confondue
-         avec le petit pas lui-même. -->
-    <div class="score-block">
-      <div class="score-block-name" style="margin-bottom:4px">
-        Préparer ton passage à l'action
-        <span style="font-weight:400;color:rgba(245,240,232,.5);text-transform:none;letter-spacing:0;font-size:11px"> (facultatif)</span>
+    <!-- CHANTIER UX 4 — Niveau 2 : Frein + Solution regroupés dans un seul
+         cadre visuel ("Ce qui peut te bloquer"), pas deux cartes séparées.
+         IDs internes inchangés (plan-frein-block/text, plan-solution-block/
+         text) — renderPlan() continue de les remplir exactement pareil. -->
+    <div class="score-block" id="plan-aide-action-block" style="display:none">
+      <div class="score-block-name" style="margin-bottom:10px">Ce qui peut te bloquer</div>
+      <div id="plan-frein-block" style="display:none">
+        <div class="just-label" style="margin-bottom:4px">Frein</div>
+        <div style="font-size:14px;color:var(--creme);line-height:1.5;margin-bottom:14px" id="plan-frein-text"></div>
       </div>
-      <div class="score-question">Qu'est-ce que tu peux préparer pour rendre cette action plus facile ? (une idée par ligne)</div>
-      <textarea class="just-input" id="plan-preparation-input" placeholder="Ex : ouvrir le site officiel
-préparer mes papiers
-choisir un créneau de 20 min"></textarea>
-      <button class="btn-ghost" onclick="savePreparation()" id="btn-save-preparation" style="margin-top:8px;font-size:12px;padding:9px 14px">Enregistrer</button>
-      <span id="plan-preparation-saved" style="display:none;font-size:12px;color:#8fbf8f;margin-left:10px">✓ Enregistré</span>
+      <div id="plan-solution-block" style="display:none">
+        <div class="just-label" style="margin-bottom:4px">Réponse à tester</div>
+        <div style="font-size:14px;color:var(--creme);line-height:1.5" id="plan-solution-text"></div>
+      </div>
     </div>
 
-    <!-- NOUVEAU (P1-4) — Le reste des réponses, secondaire, replié par défaut. -->
+    <!-- CHANTIER UX 4 — Niveau 3 : Objectif, visible mais discret, sert de
+         contexte au petit pas. Déplacé depuis le tout premier bloc de
+         l'écran ; IDs inchangés (plan-objectif/plan-objectif-text). -->
+    <div id="plan-objectif" style="display:none;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(245,240,232,.1)">
+      <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(245,240,232,.5);margin-bottom:4px">Objectif</div>
+      <div style="font-size:13px;color:rgba(245,240,232,.7);line-height:1.5" id="plan-objectif-text"></div>
+    </div>
+
+    <!-- CHANTIER UX 4 — Niveau 3 (suite) : Préparation déplacée à
+         l'intérieur de l'accordéon replié, avec le reste du questionnaire.
+         Nécessite un sous-conteneur interne (plan-details-inner) pour le
+         contenu dynamique de renderPlan(), afin que le HTML statique de
+         Préparation ne soit jamais effacé par le réécriture de
+         renderPlan() (voir renderPlan() : la ligne qui écrivait
+         auparavant dans #plan-details cible désormais #plan-details-inner
+         — seule modification JS de ce chantier, aucun changement de
+         logique de calcul). -->
     <div style="margin:6px 0 14px">
       <a href="#" onclick="togglePlanDetails(); return false;" style="font-size:13px;color:rgba(245,240,232,.55)" id="plan-details-toggle">Voir les autres éléments de mon plan ▾</a>
     </div>
-    <div id="plan-details" class="score-block" style="display:none"></div>
+    <div id="plan-details" style="display:none">
+      <div class="score-block">
+        <div class="score-block-name" style="margin-bottom:4px">
+          Préparer ton passage à l'action
+          <span style="font-weight:400;color:rgba(245,240,232,.5);text-transform:none;letter-spacing:0;font-size:11px"> (facultatif)</span>
+        </div>
+        <div class="score-question">Qu'est-ce que tu peux préparer pour rendre cette action plus facile ? (une idée par ligne)</div>
+        <textarea class="just-input" id="plan-preparation-input" placeholder="Ex : ouvrir le site officiel
+préparer mes papiers
+choisir un créneau de 20 min"></textarea>
+        <button class="btn-ghost" onclick="savePreparation()" id="btn-save-preparation" style="margin-top:8px;font-size:12px;padding:9px 14px">Enregistrer</button>
+        <span id="plan-preparation-saved" style="display:none;font-size:12px;color:#8fbf8f;margin-left:10px">✓ Enregistré</span>
+      </div>
+      <div id="plan-details-inner" class="score-block"></div>
+    </div>
 
     <div style="color:rgba(245,240,232,.5);font-size:12px;margin-top:10px;text-align:center">
       Ce plan a bien été enregistré. Retrouve-le à tout moment depuis l'accueil.
@@ -2827,6 +2843,11 @@ function renderPlan(answers, options) {
     solBlock.style.display = 'none';
   }
 
+  // CHANTIER UX 4 — le cadre parent ("Ce qui peut te bloquer") n'apparaît
+  // que si au moins l'un des deux (frein ou solution) a un contenu réel —
+  // jamais un cadre vide.
+  document.getElementById('plan-aide-action-block').style.display = (freinTexte || solutionTexte) ? 'block' : 'none';
+
   var prepInput = document.getElementById('plan-preparation-input');
   var prepSaved = document.getElementById('plan-preparation-saved');
   if (preparationTexte) {
@@ -2853,7 +2874,7 @@ function renderPlan(answers, options) {
       + '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(a.reponse) + '</div>'
       + '</div>';
   });
-  document.getElementById('plan-details').innerHTML = detailsHtml;
+  document.getElementById('plan-details-inner').innerHTML = detailsHtml;
   // Écran replié par défaut à chaque nouvel affichage du plan.
   document.getElementById('plan-details').style.display = 'none';
   document.getElementById('plan-details-toggle').textContent = 'Voir les autres éléments de mon plan ▾';
