@@ -612,6 +612,15 @@ canvas{width:100%;height:100%}
     <div id="quest-form" style="display:none">
       <div id="quest-blocks"></div>
 
+      <!-- NOUVEAU (UX 3) — navigation pas-à-pas, utilisée uniquement par
+           renderQuestionnaire() (première configuration). Masquée pour la
+           reprise de cycle (renderCyclePrepForm), qui continue d'afficher
+           tous ses champs en une fois comme avant. -->
+      <div id="quest-step-nav" style="display:none;justify-content:space-between;gap:10px;margin-top:10px">
+        <button class="btn-ghost" id="quest-btn-prev" onclick="questPrevStep()" style="flex:1;padding:12px;font-size:13px">← Précédent</button>
+        <button class="btn-ghost" id="quest-btn-next" onclick="questNextStep()" style="flex:1;padding:12px;font-size:13px;background:rgba(201,168,76,.12);border-color:var(--or)">Continuer →</button>
+      </div>
+
       <button class="btn-ghost" id="btn-submit-quest" onclick="submitQuestionnaire()"
         style="width:100%;padding:14px;margin-top:10px;font-size:13px;background:rgba(201,168,76,.12);border-color:var(--or)">
         Générer mon plan
@@ -2325,6 +2334,14 @@ function confirmMoteurChoice() {
     });
 }
 
+// NOUVEAU (UX 3) — état local du questionnaire pas-à-pas. Les réponses sont
+// gardées ici au fur et à mesure, jamais envoyées avant la validation
+// finale — submitQuestionnaire() reconstruit ensuite exactement la même
+// structure {etape, question, reponse, lettre} qu'avant ce chantier.
+var questActiveList = null;
+var questAnswers = [];
+var questCurrentIndex = 0;
+
 function renderQuestionnaire(moteur) {
   var isAncrage = moteur === 'ANCRAGE';
   document.getElementById('quest-title').textContent = isAncrage ? 'Méthode ANCRAGE' : 'Méthode RUPTURE';
@@ -2332,22 +2349,69 @@ function renderQuestionnaire(moteur) {
     ? 'Installer une action que tu ne fais pas encore.'
     : 'Interrompre une habitude déjà là.';
 
-  var questions = isAncrage ? QUESTIONS_ANCRAGE : QUESTIONS_RUPTURE;
-  var color = isAncrage ? '#8fbf8f' : '#e0847e';
-  var html = '';
+  questActiveList = isAncrage ? QUESTIONS_ANCRAGE : QUESTIONS_RUPTURE;
+  questAnswers = new Array(questActiveList.length).fill('');
+  questCurrentIndex = 0;
 
-  questions.forEach(function(q) {
-    html += '<div class="score-block">'
-      + '<div class="score-block-name"><div class="score-dot" style="background:' + color + '"></div>'
-      + q.lettre + ' — ' + (q.titreDisplay || q.titre) + '</div>'
-      + '<div class="score-question">' + q.question + '</div>'
-      + (q.aide ? '<div style="font-size:12px;color:rgba(245,240,232,.5);font-style:italic;margin:-6px 0 10px">' + escapeHtml(q.aide) + '</div>' : '')
-      + '<textarea class="just-input" id="qa-' + q.id + '" placeholder="Ta réponse..."></textarea>'
-      + '<div class="field-err" id="qerr-' + q.id + '">Ce champ est obligatoire.</div>'
-      + '</div>';
-  });
+  document.getElementById('quest-step-nav').style.display = 'flex';
+  renderQuestStep();
+}
+
+function renderQuestStep() {
+  var isAncrage = currentMoteur === 'ANCRAGE';
+  var color = isAncrage ? '#8fbf8f' : '#e0847e';
+  var total = questActiveList.length;
+  var q = questActiveList[questCurrentIndex];
+
+  var html = '<div style="font-size:12px;color:rgba(245,240,232,.5);letter-spacing:.5px;margin-bottom:14px">'
+    + (questCurrentIndex + 1) + ' sur ' + total + '</div>';
+  html += '<div class="score-block">'
+    + '<div class="score-block-name"><div class="score-dot" style="background:' + color + '"></div>'
+    + q.lettre + ' — ' + (q.titreDisplay || q.titre) + '</div>'
+    + '<div class="score-question">' + q.question + '</div>'
+    + (q.aide ? '<div style="font-size:12px;color:rgba(245,240,232,.5);font-style:italic;margin:-6px 0 10px">' + escapeHtml(q.aide) + '</div>' : '')
+    + '<textarea class="just-input" id="qa-current" placeholder="Ta réponse...">' + escapeHtml(questAnswers[questCurrentIndex] || '') + '</textarea>'
+    + '<div class="field-err" id="qerr-current">Ce champ est obligatoire.</div>'
+    + '</div>';
 
   document.getElementById('quest-blocks').innerHTML = html;
+
+  document.getElementById('quest-btn-prev').style.visibility = questCurrentIndex === 0 ? 'hidden' : 'visible';
+  var isLast = questCurrentIndex === total - 1;
+  document.getElementById('quest-btn-next').style.display = isLast ? 'none' : 'block';
+  document.getElementById('btn-submit-quest').style.display = isLast ? 'block' : 'none';
+}
+
+function questValidateCurrent() {
+  var el = document.getElementById('qa-current');
+  var err = document.getElementById('qerr-current');
+  var val = el.value.trim();
+  if (!val || val.length < 3) {
+    el.classList.add('error');
+    err.style.display = 'block';
+    return null;
+  }
+  el.classList.remove('error');
+  err.style.display = 'none';
+  return val;
+}
+
+function questNextStep() {
+  var val = questValidateCurrent();
+  if (val === null) return;
+  questAnswers[questCurrentIndex] = val;
+  questCurrentIndex++;
+  renderQuestStep();
+}
+
+function questPrevStep() {
+  if (questCurrentIndex === 0) return;
+  // Sauvegarde ce qui est tapé, même incomplet, avant de reculer — pour
+  // ne jamais perdre une saisie en cours si l'utilisateur revient en avant
+  // ensuite.
+  questAnswers[questCurrentIndex] = document.getElementById('qa-current').value;
+  questCurrentIndex--;
+  renderQuestStep();
 }
 
 // NOUVEAU (30/08/2026) — Modèle multi-cycle, Chantier 3.
@@ -2557,6 +2621,12 @@ function renderCyclePrepForm(moteur, objectif, checkinContext) {
   var btn = document.getElementById('btn-submit-quest');
   btn.textContent = 'Générer mon plan';
   btn.onclick = submitCyclePrep;
+  // NOUVEAU (UX 3) — garde-fou défensif : si une session précédente a
+  // laissé la navigation pas-à-pas ou ce bouton dans un état caché (voir
+  // renderQuestStep()), on les remet ici à leur affichage normal pour la
+  // reprise de cycle, qui n'utilise jamais ce mode pas-à-pas.
+  document.getElementById('quest-step-nav').style.display = 'none';
+  btn.style.display = 'block';
 }
 
 function cpToggleSignalEdit(etapeId) {
@@ -2700,26 +2770,18 @@ function submitCyclePrep() {
 }
 
 function submitQuestionnaire() {
-  var questions = currentMoteur === 'ANCRAGE' ? QUESTIONS_ANCRAGE : QUESTIONS_RUPTURE;
-  var ok = true;
-  var answers = [];
+  // NOUVEAU (UX 3) — les réponses viennent désormais du tableau local
+  // rempli au fil du parcours pas-à-pas, plus d'une lecture de 7-8
+  // textarea simultanés. La dernière question (actuellement affichée) est
+  // validée et capturée ici avant de construire le tableau final.
+  var lastVal = questValidateCurrent();
+  if (lastVal === null) return;
+  questAnswers[questCurrentIndex] = lastVal;
 
-  questions.forEach(function(q) {
-    var el = document.getElementById('qa-' + q.id);
-    var err = document.getElementById('qerr-' + q.id);
-    var val = el.value.trim();
-    if (!val || val.length < 3) {
-      el.classList.add('error'); err.style.display = 'block'; ok = false;
-    } else {
-      el.classList.remove('error'); err.style.display = 'none';
-      answers.push({ etape: q.lettre + ' — ' + q.titre, question: q.question, reponse: val, lettre: q.lettre });
-    }
+  var questions = questActiveList;
+  var answers = questions.map(function(q, i) {
+    return { etape: q.lettre + ' — ' + q.titre, question: q.question, reponse: questAnswers[i], lettre: q.lettre };
   });
-
-  if (!ok) {
-    document.querySelector('#quest-blocks .just-input.error').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    return;
-  }
 
   var btn = document.getElementById('btn-submit-quest');
   btn.disabled = true;
