@@ -136,12 +136,40 @@ export default async function handler(req, res) {
     // proviennent bien de deux cycles distincts, et diffèrent textuellement.
     let evolutions = [];
     // NOUVEAU (Chantier UX 6, étape A) — Historique des petits pas
-    // individuels, additif, construit uniquement à partir des données déjà
-    // lues plus bas (configRecords). Jamais confondu avec "Actions
-    // prévues" du cycle (un champ différent) ni avec les autres réponses
-    // du questionnaire — filtre strict sur l'étape exacte du petit pas
-    // (même prédicat que resolvePetitPas ailleurs dans le projet).
+    // individuels, additif. Volontairement INDÉPENDANT de la condition
+    // "cycles.length >= 2" ci-dessous (qui ne concerne que "Mon miroir") :
+    // un historique de petits pas est légitime dès le premier cycle, par
+    // exemple quand un petit pas a déjà été terminé et remplacé à
+    // l'intérieur de ce même cycle (P1-5/P1-6).
     let petitsPasHistorique = [];
+    if (moteur === 'ANCRAGE' || moteur === 'RUPTURE') {
+      const configIdsForPetitsPas = expData.fields['CSR_Configuration'] || [];
+      const configRecordsForPetitsPas = await fetchByIds('CSR_Configuration', configIdsForPetitsPas);
+
+      // Filtre : uniquement l'étape exacte du petit pas selon le moteur
+      // (jamais "Actions prévues" du cycle, jamais une autre réponse du
+      // questionnaire) — même prédicat que resolvePetitPas ailleurs dans
+      // le projet. Tri chronologique croissant, pour raconter l'histoire
+      // dans l'ordre.
+      const petitPasEtapePredicate = moteur === 'ANCRAGE'
+        ? (e) => e === 'A — Agir'
+        : (e) => !!e && e.includes("Utiliser l'alternative");
+      petitsPasHistorique = configRecordsForPetitsPas
+        .filter((r) => petitPasEtapePredicate(r.fields['Étape'] || ''))
+        .map((r) => {
+          const s = r.fields['Statut du petit pas'];
+          const statutNom = typeof s === 'string' ? s : (s && s.name) || null;
+          const cycleLinks = r.fields['Cycle'] || [];
+          return {
+            reponse: r.fields['Réponse'] || null,
+            statut: statutNom,
+            date: r.createdTime ? r.createdTime.slice(0, 10) : null,
+            cycleId: cycleLinks[0] || null,
+          };
+        })
+        .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+    }
+
     if (cycles.length >= 2) {
       const ETAPES_COMPARABLES =
         moteur === 'ANCRAGE'
@@ -156,30 +184,6 @@ export default async function handler(req, res) {
 
         const configIdsForEvo = expData.fields['CSR_Configuration'] || [];
         const configRecords = await fetchByIds('CSR_Configuration', configIdsForEvo);
-
-        // NOUVEAU (Chantier UX 6, étape A) — construit à partir de
-        // configRecords, déjà chargé juste au-dessus pour un autre usage :
-        // aucun nouveau fetch. Filtre : uniquement l'étape exacte du petit
-        // pas selon le moteur (jamais "Actions prévues", jamais une autre
-        // réponse du questionnaire). Tri chronologique croissant (du plus
-        // ancien au plus récent), pour raconter l'histoire dans l'ordre.
-        const petitPasEtapePredicate = moteur === 'ANCRAGE'
-          ? (e) => e === 'A — Agir'
-          : (e) => !!e && e.includes("Utiliser l'alternative");
-        petitsPasHistorique = configRecords
-          .filter((r) => petitPasEtapePredicate(r.fields['Étape'] || ''))
-          .map((r) => {
-            const s = r.fields['Statut du petit pas'];
-            const statutNom = typeof s === 'string' ? s : (s && s.name) || null;
-            const cycleLinks = r.fields['Cycle'] || [];
-            return {
-              reponse: r.fields['Réponse'] || null,
-              statut: statutNom,
-              date: r.createdTime ? r.createdTime.slice(0, 10) : null,
-              cycleId: cycleLinks[0] || null,
-            };
-          })
-          .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
 
         const findReponse = (etape, cycleId) => {
           const rec = configRecords.find(
