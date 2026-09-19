@@ -917,28 +917,36 @@ choisir un créneau de 20 min"></textarea>
          contenu legacy ci-dessous. -->
     <div id="experience-progress-block" style="display:none;margin-bottom:14px"></div>
 
-    <!-- Graphique -->
-    <div class="chart-card">
-      <div class="chart-title">Progression</div>
-      <div class="chart-wrap"><canvas id="chart"></canvas></div>
-      <div class="chart-legend">
-        <div class="legend-item"><div class="legend-dot" style="background:#E0C87E"></div>AO</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#c9a84c"></div>AI</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#F5F0E8"></div>CE</div>
+    <!-- CHANTIER UX 6, ÉTAPE B — Legacy regroupé, entièrement conditionnel
+         à seances.length > 0 (piloté depuis showNav('tableau')). Ni
+         renderChart() ni renderHistory() ni renderRacinesBilan() ne sont
+         modifiées — seule leur activation devient conditionnelle. -->
+    <div id="legacy-block" style="display:none">
+      <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(245,240,232,.35);margin:24px 0 10px">Ton ancien suivi</div>
+
+      <!-- Graphique -->
+      <div class="chart-card">
+        <div class="chart-title">Progression</div>
+        <div class="chart-wrap"><canvas id="chart"></canvas></div>
+        <div class="chart-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#E0C87E"></div>AO</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#c9a84c"></div>AI</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#F5F0E8"></div>CE</div>
+        </div>
       </div>
-    </div>
 
-    <!-- Racines -->
-    <div class="history-card" id="racines-bilan-card" style="display:none">
-      <div class="section-label">Racines les plus fréquentes</div>
-      <div style="font-size:12px;color:rgba(245,240,232,.55);margin-top:-8px;margin-bottom:14px">Sur l'ensemble de l'accompagnement.</div>
-      <div id="racines-bilan-list"></div>
-    </div>
+      <!-- Racines -->
+      <div class="history-card" id="racines-bilan-card" style="display:none">
+        <div class="section-label">Racines les plus fréquentes</div>
+        <div style="font-size:12px;color:rgba(245,240,232,.55);margin-top:-8px;margin-bottom:14px">Sur l'ensemble de l'accompagnement.</div>
+        <div id="racines-bilan-list"></div>
+      </div>
 
-    <!-- Historique -->
-    <div class="history-card">
-      <div class="section-label">Historique des séances</div>
-      <div id="history-list"></div>
+      <!-- Historique -->
+      <div class="history-card">
+        <div class="section-label">Historique des séances</div>
+        <div id="history-list"></div>
+      </div>
     </div>
   </div>
 
@@ -1611,10 +1619,21 @@ function showNav(nav) {
   if (nav === 'tableau') {
     document.getElementById('tableau-meta').textContent =
       seances.length + " séance" + (seances.length > 1 ? "s" : "");
-    renderHistory();
-    renderRacinesBilan();
     renderExperienceProgress();
-    setTimeout(renderChart, 100);
+    // CHANTIER UX 6, ÉTAPE B — le bloc legacy entier (graphique + racines
+    // + historique) n'est ni affiché ni même calculé si aucune vraie
+    // séance n'existe pour ce client — "aucune trace" au sens strict,
+    // pas juste masqué visuellement. renderChart()/renderHistory()/
+    // renderRacinesBilan() restent inchangées.
+    var legacyBlock = document.getElementById('legacy-block');
+    if (seances.length > 0) {
+      legacyBlock.style.display = 'block';
+      renderHistory();
+      renderRacinesBilan();
+      setTimeout(renderChart, 100);
+    } else {
+      legacyBlock.style.display = 'none';
+    }
   }
   if (nav === 'seance') {
     var eng = load('engagements_' + code);
@@ -4002,7 +4021,10 @@ function renderExperienceProgress() {
 
           var html = '';
 
-          // ── NIVEAU 1 — MON HISTOIRE JUSQU'ICI ──────────────────────
+          // ── GROUPE 1 — MON HISTOIRE (léger : un simple repère textuel,
+          //    pas une carte enveloppante supplémentaire) ────────────────
+          html += '<div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(245,240,232,.4);margin:4px 0 10px">Mon histoire</div>';
+
           html += '<div class="chart-card">';
           html += '<div class="chart-title">Mon histoire jusqu\'ici</div>';
           html += '<div class="score-block-name" style="margin-bottom:2px">'
@@ -4024,51 +4046,9 @@ function renderExperienceProgress() {
           }
           html += '</div>';
 
-          // ── NIVEAU 2 — CE QUE J'AI EXPÉRIMENTÉ ET DÉCOUVERT ────────
-          // Lecture chronologique continue, avec un lien visuel (flèche)
-          // entre un cycle et le suivant — pas une liste plate, une
-          // boucle d'apprentissage. Aucune interprétation : la décision
-          // affichée est celle écrite par le client, jamais déduite.
-          if (cycles.length > 0) {
-            html += '<div class="chart-card">';
-            html += '<div class="chart-title">Ce que j\'ai expérimenté et découvert</div>';
-            cycles.forEach(function(c, i) {
-              var estActuel = c.cycleId === cycleData.cycleId;
-              html += '<div style="padding:12px 0' + (i < cycles.length - 1 ? ';border-bottom:none' : '') + '">';
-              html += '<div style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:' + (estActuel ? 'var(--or)' : 'rgba(245,240,232,.6)') + ';margin-bottom:6px">'
-                + escapeHtml(c.nomCycle || ('Cycle ' + c.numeroCycle)) + (estActuel && enCours ? ' — en cours' : '') + '</div>';
-              if (c.actionsPrevues) {
-                html += '<div style="font-size:13px;color:var(--creme);line-height:1.6;margin-bottom:4px"><span style="color:rgba(245,240,232,.5)">J\'ai testé :</span> ' + escapeHtml(c.actionsPrevues) + '</div>';
-              }
-              if (c.alreadyEvaluated) {
-                if (c.apprentissage) {
-                  html += '<div style="font-size:13px;color:var(--creme);line-height:1.6;margin-bottom:4px"><span style="color:rgba(245,240,232,.5)">J\'ai découvert :</span> ' + escapeHtml(c.apprentissage) + '</div>';
-                }
-                if (c.decisionSuivante) {
-                  html += '<div style="font-size:13px;color:var(--creme);line-height:1.6"><span style="color:rgba(245,240,232,.5)">J\'ai décidé :</span> <b>' + escapeHtml(c.decisionSuivante) + '</b></div>';
-                }
-              } else {
-                html += '<div style="font-size:13px;color:rgba(245,240,232,.5);font-style:italic">En cours — pas encore de bilan.</div>';
-              }
-              html += '</div>';
-              if (i < cycles.length - 1) {
-                html += '<div style="text-align:center;color:var(--or);font-size:16px;opacity:.6;padding:2px 0">↓</div>';
-              }
-            });
-            html += '</div>';
-          }
-
-          // ── MON MIROIR ───────────────────────────────────────────────
-          // MIS À JOUR (31/08/2026) — Chantier 15 : restructuration de
-          // l'ancien bloc "Ce qui a changé" (Chantier 8). Même donnée
-          // source (evolutions[]), désormais thématisée via son champ
-          // `label` (déjà calculé côté serveur, jamais exploité jusqu'ici)
-          // plutôt qu'affichée en liste brute — plus une carte "Tes
-          // décisions" à partir de cycles[].decisionSuivante (déjà
-          // disponible, déjà utilisé dans le PDF au Chantier 13). Aucune
-          // nouvelle donnée, aucun nouveau fetch. Maximum 3 cartes.
-          // Jamais de phrase d'interprétation ajoutée — uniquement les
-          // réponses et décisions telles qu'écrites/prises.
+          // ── MON MIROIR — contenu et calcul strictement inchangés,
+          //    seule sa position dans la page change (juste après "Mon
+          //    histoire jusqu'ici", dans le même groupe visuel). ────────
           var evolutions = cycleData.evolutions || [];
           var evoObjectif = evolutions.find(function(ev) { return ev.label === 'objectif'; });
           var evoAction = evolutions.find(function(ev) { return ev.label === 'action'; });
@@ -4114,35 +4094,8 @@ function renderExperienceProgress() {
             html += '</div>';
           }
 
-          // ── MOMENTS & AJUSTEMENTS ───────────────────────────────────
-          // NOUVEAU (31/08/2026) — Chantier 16. Juxtapose un moment réel
-          // (citation + date + cycle) avec l'ajustement testé au cycle
-          // suivant — sans jamais écrire de lien de causalité. Si aucune
-          // action suivante n'existe (dernier cycle), seule la citation
-          // est affichée. Jamais d'association fabriquée.
-          var moments = cycleData.moments || [];
-          if (moments.length > 0) {
-            html += '<div class="chart-card">';
-            html += '<div class="chart-title">Moments & ajustements</div>';
-            html += '<div style="font-size:12px;color:rgba(245,240,232,.5);margin-bottom:14px">Des moments réels de ton parcours et ce que tu as testé ensuite.</div>';
-            moments.forEach(function(m, i) {
-              html += '<div style="' + (i < moments.length - 1 ? 'margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(245,240,232,.1)' : '') + '">';
-              html += '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(245,240,232,.5);margin-bottom:2px">' + escapeHtml(m.cycleLabel || 'Cycle') + ' — moment observé' + (m.date ? ' · ' + formatDateFr(m.date) : '') + '</div>';
-              html += '<div style="font-size:14px;color:var(--creme);line-height:1.5;margin-bottom:' + (m.ajustementAction ? '10px' : '0') + '">« ' + escapeHtml(m.citation) + ' »</div>';
-              if (m.ajustementAction) {
-                html += '<div style="text-align:center;color:var(--or);font-size:14px;opacity:.7">↓</div>';
-                html += '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin:6px 0 2px">' + escapeHtml(m.ajustementCycleLabel || 'Cycle suivant') + ' — ajustement</div>';
-                html += '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(m.ajustementAction) + '</div>';
-              }
-              html += '</div>';
-            });
-            html += '</div>';
-          }
-
-          // ── NIVEAU 3 — MES PREUVES ─────────────────────────────────
-          // Uniquement des faits comptés, jamais un score ou un
-          // pourcentage de "réussite" fabriqué. Le ratio n'apparaît que
-          // s'il est déjà calculé avec son dénominateur (indicateur).
+          // ── MES PREUVES — contenu et calcul strictement inchangés,
+          //    repositionnée dans le groupe "Mon histoire". ─────────────
           var citations = cycleData.citations || [];
           var aDesPreuves = (cycleData.totalObservations > 0) || citations.length > 0;
           if (aDesPreuves) {
@@ -4163,6 +4116,82 @@ function renderExperienceProgress() {
                 html += '<div style="font-size:13px;color:rgba(245,240,232,.75);font-style:italic;line-height:1.6;margin-top:10px;padding-left:12px;border-left:2px solid rgba(245,240,232,.15)">« ' + escapeHtml(cit) + ' »</div>';
               });
             }
+            html += '</div>';
+          }
+
+          // ── GROUPE 2 — MES EXPÉRIMENTATIONS ─────────────────────────
+          // NOUVEAU (Chantier UX 6, étape B) — "Mes petits pas" utilise
+          // exclusivement petitsPasHistorique (étape A), déjà trié
+          // chronologiquement par le serveur. "Mes cycles" utilise
+          // exclusivement cycles[], déjà disponible — remplace l'ancienne
+          // section narrative "Ce que j'ai expérimenté et découvert",
+          // structurellement redondante avec cette nouvelle liste plus
+          // factuelle (numéro / période / décision).
+          var petitsPasHistorique = cycleData.petitsPasHistorique || [];
+          if (petitsPasHistorique.length > 0 || cycles.length > 0) {
+            html += '<div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(245,240,232,.4);margin:20px 0 10px">Mes expérimentations</div>';
+          }
+
+          if (petitsPasHistorique.length > 0) {
+            html += '<div class="chart-card">';
+            html += '<div class="chart-title">Mes petits pas</div>';
+            petitsPasHistorique.forEach(function(p, i) {
+              var marqueur = p.statut === 'Actif' ? '<span style="color:var(--or)">●</span>'
+                : p.statut === 'Terminé' ? '<span style="color:rgba(245,240,232,.5)">✓</span>'
+                : p.statut === 'Remplacé' ? '<span style="color:rgba(245,240,232,.35)">—</span>'
+                : '<span style="color:rgba(245,240,232,.35)">·</span>';
+              var statutTexte = p.statut ? escapeHtml(p.statut) : '';
+              var dateTexte = p.date ? formatDateFr(p.date) : '';
+              html += '<div style="' + (i < petitsPasHistorique.length - 1 ? 'margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid rgba(245,240,232,.08)' : '') + '">';
+              html += '<div style="font-size:14px;color:var(--creme);line-height:1.5;margin-bottom:2px">' + marqueur + ' ' + escapeHtml(p.reponse || '—') + '</div>';
+              if (statutTexte || dateTexte) {
+                html += '<div style="font-size:11px;color:rgba(245,240,232,.45);letter-spacing:.3px">' + [statutTexte, dateTexte].filter(Boolean).join(' · ') + '</div>';
+              }
+              html += '</div>';
+            });
+            html += '</div>';
+          }
+
+          if (cycles.length > 0) {
+            html += '<div class="chart-card">';
+            html += '<div class="chart-title">Mes cycles</div>';
+            cycles.forEach(function(c, i) {
+              var periode = (c.dateDebut && c.dateFin)
+                ? formatDateFr(c.dateDebut) + ' → ' + formatDateFr(c.dateFin)
+                : (c.dateDebut ? formatDateFr(c.dateDebut) : '');
+              html += '<div style="' + (i < cycles.length - 1 ? 'margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid rgba(245,240,232,.08)' : '') + '">';
+              html += '<div style="font-size:13px;font-weight:700;color:var(--creme);margin-bottom:2px">' + escapeHtml(c.nomCycle || ('Cycle ' + c.numeroCycle)) + '</div>';
+              if (periode) {
+                html += '<div style="font-size:11px;color:rgba(245,240,232,.45);letter-spacing:.3px;margin-bottom:4px">' + periode + '</div>';
+              }
+              if (c.decisionSuivante) {
+                html += '<div style="font-size:13px;color:var(--or)">Décision : <b>' + escapeHtml(c.decisionSuivante) + '</b></div>';
+              } else {
+                html += '<div style="font-size:12px;color:rgba(245,240,232,.4);font-style:italic">En cours — pas encore de bilan.</div>';
+              }
+              html += '</div>';
+            });
+            html += '</div>';
+          }
+
+          // ── NIVEAU 3 — MOMENTS & AJUSTEMENTS — contenu et calcul
+          //    strictement inchangés. ──────────────────────────────────
+          var moments = cycleData.moments || [];
+          if (moments.length > 0) {
+            html += '<div class="chart-card">';
+            html += '<div class="chart-title">Moments & ajustements</div>';
+            html += '<div style="font-size:12px;color:rgba(245,240,232,.5);margin-bottom:14px">Des moments réels de ton parcours et ce que tu as testé ensuite.</div>';
+            moments.forEach(function(m, i) {
+              html += '<div style="' + (i < moments.length - 1 ? 'margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(245,240,232,.1)' : '') + '">';
+              html += '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(245,240,232,.5);margin-bottom:2px">' + escapeHtml(m.cycleLabel || 'Cycle') + ' — moment observé' + (m.date ? ' · ' + formatDateFr(m.date) : '') + '</div>';
+              html += '<div style="font-size:14px;color:var(--creme);line-height:1.5;margin-bottom:' + (m.ajustementAction ? '10px' : '0') + '">« ' + escapeHtml(m.citation) + ' »</div>';
+              if (m.ajustementAction) {
+                html += '<div style="text-align:center;color:var(--or);font-size:14px;opacity:.7">↓</div>';
+                html += '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--or);margin:6px 0 2px">' + escapeHtml(m.ajustementCycleLabel || 'Cycle suivant') + ' — ajustement</div>';
+                html += '<div style="font-size:14px;color:var(--creme);line-height:1.5">' + escapeHtml(m.ajustementAction) + '</div>';
+              }
+              html += '</div>';
+            });
             html += '</div>';
           }
 
