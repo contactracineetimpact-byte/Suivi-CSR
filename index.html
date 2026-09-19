@@ -674,31 +674,46 @@ canvas{width:100%;height:100%}
            un lui-même, texte libre, jamais une proposition automatique
            déduite de l'objectif ou de l'ancienne réponse. -->
       <div id="petit-pas-transitoire" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid rgba(245,240,232,.12)">
-        <div style="font-size:14px;color:var(--creme);margin-bottom:14px">Ton petit pas est terminé ✓</div>
 
-        <!-- NOUVEAU (Chantier B, priorité 1) — Reconnaissance factuelle,
-             uniquement affichée si la donnée existe réellement (test 9) :
-             pas de bloc vide, pas de texte reformulé, uniquement ce que le
-             client a lui-même écrit. -->
-        <div id="petit-pas-recap-termine" style="display:none;margin-bottom:12px">
-          <div class="just-label" style="margin-bottom:4px">Tu viens de terminer :</div>
-          <div style="font-size:14px;color:var(--creme);line-height:1.5" id="petit-pas-recap-termine-texte"></div>
-        </div>
-        <div id="petit-pas-recap-passe" style="display:none;margin-bottom:16px">
-          <div class="just-label" style="margin-bottom:4px">Ce qui s'est passé :</div>
-          <div style="font-size:14px;color:var(--creme);line-height:1.5" id="petit-pas-recap-passe-texte"></div>
+        <!-- CHANTIER UX 5 — Sous-état 2a : reconnaissance sobre, seule
+             visible d'abord. "Continuer" est purement local (aucun appel
+             réseau) — il affiche simplement le sous-état 2b ci-dessous. -->
+        <div id="petit-pas-recap-block">
+          <div style="font-size:14px;color:var(--creme);margin-bottom:14px">Ton petit pas est terminé ✓</div>
+
+          <!-- NOUVEAU (Chantier B, priorité 1) — Reconnaissance factuelle,
+               uniquement affichée si la donnée existe réellement (test 9) :
+               pas de bloc vide, pas de texte reformulé, uniquement ce que le
+               client a lui-même écrit. -->
+          <div id="petit-pas-recap-termine" style="display:none;margin-bottom:12px">
+            <div class="just-label" style="margin-bottom:4px">Tu viens de terminer :</div>
+            <div style="font-size:14px;color:var(--creme);line-height:1.5" id="petit-pas-recap-termine-texte"></div>
+          </div>
+          <div id="petit-pas-recap-passe" style="display:none;margin-bottom:16px">
+            <div class="just-label" style="margin-bottom:4px">Ce qui s'est passé :</div>
+            <div style="font-size:14px;color:var(--creme);line-height:1.5" id="petit-pas-recap-passe-texte"></div>
+          </div>
+
+          <button class="btn-ghost" onclick="avancerVersProchainPetitPas()" style="width:100%;padding:12px;font-size:13px">
+            Continuer →
+          </button>
         </div>
 
-        <div class="just-label" style="margin-bottom:2px">Et maintenant ?</div>
-        <div class="just-label" style="margin-bottom:6px;font-weight:400;text-transform:none;letter-spacing:0;color:rgba(245,240,232,.7)">Qu'est-ce que tu veux faire ensuite pour continuer à avancer vers ton objectif ?</div>
-        <div class="score-block-name" style="margin-bottom:6px">Ton prochain petit pas</div>
-        <textarea class="just-input" id="prochain-petit-pas-input" placeholder="Ta réponse..."></textarea>
-        <div style="font-size:12px;color:rgba(245,240,232,.5);font-style:italic;margin:4px 0 10px">Écris la plus petite action utile que tu peux réellement faire.</div>
-        <div class="field-err" id="prochain-petit-pas-err">Ce champ est obligatoire.</div>
-        <button class="btn-ghost" id="btn-definir-prochain-petit-pas" onclick="definirProchainPetitPas()" style="width:100%;padding:12px;font-size:13px;background:rgba(201,168,76,.12);border-color:var(--or)">
-          Définir mon prochain petit pas
-        </button>
-        <div id="prochain-petit-pas-erreur" class="field-err" style="display:none;margin-top:8px"></div>
+        <!-- CHANTIER UX 5 — Sous-état 2b : décision du prochain petit pas.
+             Masqué par défaut, révélé uniquement par le clic local
+             ci-dessus — jamais affiché en même temps que le recap. -->
+        <div id="petit-pas-prochain-block" style="display:none">
+          <div class="just-label" style="margin-bottom:2px">Et maintenant ?</div>
+          <div class="just-label" style="margin-bottom:6px;font-weight:400;text-transform:none;letter-spacing:0;color:rgba(245,240,232,.7)">Qu'est-ce que tu veux faire ensuite pour continuer à avancer vers ton objectif ?</div>
+          <div class="score-block-name" style="margin-bottom:6px">Ton prochain petit pas</div>
+          <textarea class="just-input" id="prochain-petit-pas-input" placeholder="Ta réponse..."></textarea>
+          <div style="font-size:12px;color:rgba(245,240,232,.5);font-style:italic;margin:4px 0 10px">Écris la plus petite action utile que tu peux réellement faire.</div>
+          <div class="field-err" id="prochain-petit-pas-err">Ce champ est obligatoire.</div>
+          <button class="btn-ghost" id="btn-definir-prochain-petit-pas" onclick="definirProchainPetitPas()" style="width:100%;padding:12px;font-size:13px;background:rgba(201,168,76,.12);border-color:var(--or)">
+            Définir mon prochain petit pas
+          </button>
+          <div id="prochain-petit-pas-erreur" class="field-err" style="display:none;margin-top:8px"></div>
+        </div>
       </div>
     </div>
 
@@ -2976,6 +2991,14 @@ function refreshPetitPasCTA() {
         currentPetitPasConfigId = null;
         btn.style.display = 'none';
         transitoire.style.display = 'block';
+        // CHANTIER UX 5 — à chaque calcul frais (y compris après un
+        // rechargement de page), on repart du sous-état 2a (recap seul).
+        // Rien n'est mémorisé côté serveur pour le sous-état 2b — c'est
+        // un choix assumé : un rechargement pendant la décision revient
+        // au recap, jamais une perte de donnée puisque rien n'y était
+        // encore écrit.
+        document.getElementById('petit-pas-recap-block').style.display = 'block';
+        document.getElementById('petit-pas-prochain-block').style.display = 'none';
         // NOUVEAU (P1-6) — champ de saisie du prochain petit pas remis à
         // zéro à chaque affichage, jamais pré-rempli par une déduction.
         var inputEl = document.getElementById('prochain-petit-pas-input');
@@ -3020,6 +3043,16 @@ function refreshPetitPasCTA() {
 // save-configuration.js (étape déjà reconnue par estEtapePetitPas côté
 // serveur, Statut='Actif' appliqué automatiquement) — le seul ajout
 // serveur est le garde-fou d'unicité, pas une nouvelle route.
+// CHANTIER UX 5 — Transition purement locale entre les deux sous-états de
+// "petit pas terminé" : aucun appel réseau, aucune écriture. Le recap et le
+// formulaire du prochain petit pas viennent déjà de la même lecture
+// (refreshPetitPasCTA), on se contente ici de révéler le second et de
+// masquer le premier.
+function avancerVersProchainPetitPas() {
+  document.getElementById('petit-pas-recap-block').style.display = 'none';
+  document.getElementById('petit-pas-prochain-block').style.display = 'block';
+}
+
 function definirProchainPetitPas() {
   var input = document.getElementById('prochain-petit-pas-input');
   var err = document.getElementById('prochain-petit-pas-err');
