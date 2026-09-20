@@ -242,7 +242,7 @@ canvas{width:100%;height:100%}
       <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
         <button class="btn-ghost" onclick="goHub()" style="padding:9px 13px;font-size:18px;line-height:1" title="Accueil">⌂</button>
         <button class="btn-ghost" onclick="exportPDF()" style="padding:9px 13px;font-size:18px;line-height:1" title="Télécharger mon parcours">↓</button>
-        <button class="btn-ghost" onclick="confirmResetExperience()" style="padding:9px 13px;font-size:18px;line-height:1;color:#c0392b;border-color:rgba(192,57,43,.3)" title="Réinitialiser l'expérience">↺</button>
+        <button class="btn-ghost" onclick="confirmReset()" style="padding:9px 13px;font-size:18px;line-height:1;color:#c0392b;border-color:rgba(192,57,43,.3)" title="Réinitialiser">↺</button>
         <button class="btn-ghost" onclick="doLogout()" style="padding:9px 13px;font-size:18px;line-height:1" title="Quitter">×</button>
       </div>
     </div>
@@ -979,26 +979,6 @@ choisir un créneau de 20 min"></textarea>
   </div>
 </div>
 
-<!-- NOUVEAU (Chantier "Réinitialiser une expérience") — Modale dédiée à la
-     réinitialisation d'une expérience ANCRAGE/RUPTURE, distincte de
-     l'ancienne modale legacy ci-dessus (qui ne concerne que les séances
-     AO/AI/CE). Pas de saisie de confirmation par prénom nécessaire ici —
-     bouton directement actif (.ready ajouté dans le HTML, pas via un
-     mécanisme de frappe). -->
-<div class="modal-overlay" id="modal-reset-experience">
-  <div class="modal-card">
-    <div class="modal-icon">⚠️</div>
-    <div class="modal-title">Réinitialiser cette expérience ?</div>
-    <p class="modal-txt">L'expérience actuelle sera abandonnée et retirée de ton suivi actif.<br>Ton historique sera conservé.</p>
-    <p class="modal-txt">Tu pourras ensuite démarrer une nouvelle expérience.</p>
-    <div id="reset-experience-err" class="field-err" style="display:none;margin-bottom:8px;text-align:center"></div>
-    <div class="modal-btns">
-      <button class="btn-cancel" onclick="closeResetExperience()">Annuler</button>
-      <button class="btn-danger ready" id="btn-reset-experience" onclick="doResetExperience()">Réinitialiser</button>
-    </div>
-  </div>
-</div>
-
 <script>
 // ── CONFIG ───────────────────────────────────────────────
 // Liste de SECOURS uniquement, utilisée si le serveur Airtable est injoignable.
@@ -1234,7 +1214,6 @@ function showDashboard() {
   checkPersonalizedCheckin();
   renderContextualBanner();
   renderHowto();
-  checkMissedDay();
   renderHubHint();
   renderHubTimeline();
   renderHubBadges();
@@ -1279,6 +1258,17 @@ function updateLegacyVisibility(hasExperience) {
   if (scoresEl) scoresEl.style.display = showLegacy ? '' : 'none';
   if (scoresHintEl && !showLegacy) scoresHintEl.style.display = 'none';
   if (howtoEl) howtoEl.style.display = showLegacy ? '' : 'none';
+
+  // NOUVEAU (Chantier "bannière jours sans validation") — même variable
+  // showLegacy déjà calculée ci-dessus, réutilisée telle quelle pour la
+  // bannière "jours sans validation" (checkMissedDay(), 100% legacy).
+  // Retiré des appels systématiques de showDashboard()/showNav('home') ;
+  // checkMissedDay() elle-même reste inchangée.
+  if (showLegacy) {
+    checkMissedDay();
+  } else {
+    document.getElementById('missed-day-banner').style.display = 'none';
+  }
 }
 
 function toggleHowto() {
@@ -1677,7 +1667,6 @@ function showNav(nav) {
     checkPersonalizedCheckin();
     renderContextualBanner();
     renderHowto();
-    checkMissedDay();
   }
   window.scrollTo(0, 0);
 }
@@ -1893,59 +1882,6 @@ function doReset() {
   seances = [];
   closeReset();
   showDashboard();
-}
-
-// NOUVEAU (Chantier "Réinitialiser une expérience") — Réinitialisation
-// d'une expérience ANCRAGE/RUPTURE, distincte du mécanisme legacy
-// ci-dessus. Mode client de reset-experience.js : envoie uniquement le
-// code, jamais de secret admin ni d'identifiant d'expérience — le serveur
-// résout et vérifie tout lui-même.
-function confirmResetExperience() {
-  document.getElementById('reset-experience-err').style.display = 'none';
-  document.getElementById('modal-reset-experience').classList.add('open');
-}
-
-function closeResetExperience() {
-  document.getElementById('modal-reset-experience').classList.remove('open');
-}
-
-function doResetExperience() {
-  var btn = document.getElementById('btn-reset-experience');
-  var err = document.getElementById('reset-experience-err');
-  err.style.display = 'none';
-  btn.disabled = true;
-  btn.textContent = 'Réinitialisation...';
-
-  fetch('/api/reset-experience', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code: code }),
-  })
-    .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
-    .then(function(result) {
-      btn.disabled = false;
-      btn.textContent = 'Réinitialiser';
-      if (!result.ok) {
-        // Jamais de succès simulé : on affiche l'erreur telle que renvoyée
-        // par le serveur (statut invalide, erreur réseau, etc.) et on
-        // s'arrête là — aucun changement d'état local.
-        err.textContent = result.data.error || "Une erreur est survenue. Réessaie, ou préviens Franck si ça persiste.";
-        err.style.display = 'block';
-        return;
-      }
-      closeResetExperience();
-      // Recharge l'état réel depuis le serveur — s-home affichera alors
-      // naturellement l'État A ("Ton parcours commence ici"), puisque le
-      // client n'a plus d'expérience active.
-      showDashboard();
-    })
-    .catch(function(e) {
-      btn.disabled = false;
-      btn.textContent = 'Réinitialiser';
-      err.textContent = "Erreur réseau. Réessaie, ou préviens Franck si ça persiste.";
-      err.style.display = 'block';
-      console.warn('Erreur doResetExperience :', e);
-    });
 }
 
 // ── EXPORT PDF ────────────────────────────────────────────
